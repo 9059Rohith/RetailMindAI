@@ -2,7 +2,7 @@ services:
   app:
     build: .
     ports:
-      - "8501:8501"
+      - "${APP_PORT:-8501}:8501"
     environment:
       DATABASE_MODE: mysql
       MYSQL_HOST: mysql

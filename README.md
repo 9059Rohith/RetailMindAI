@@ -79,7 +79,7 @@ Open `http://localhost:8501`. The committed demo loads immediately; no sign-in, 
 docker compose up --build
 ```
 
-This starts the app and a local MySQL container. Open `http://localhost:8501`. The sample credentials in `docker-compose.yml` are for local development only. SQLite fallback is available if MySQL cannot be reached.
+This starts the app and a local MySQL container. Open `http://localhost:8501`. Set `APP_PORT=8502` before running Compose if port 8501 is occupied. The sample credentials in `docker-compose.yml` are for local development only. SQLite fallback is available if MySQL cannot be reached.
 
 ## Data: bring your own or reproduce ours
 
@@ -171,7 +171,7 @@ python -m compileall -q app retailmind
 
 The workflow template at [`ci/quality-gates.yml`](ci/quality-gates.yml) is ready to copy to `.github/workflows/ci.yml`. The current GitHub credential cannot write workflow files, so hosted CI is **not yet active**. Local checks run as shown above. Tests check deterministic generation, cleaning without source mutation, KPI formulas, lag leakage, rolling backtests, inventory formulas, risk, scenarios and allocation.
 
-The latest local check runs the full automated suite, lint, syntax compilation, generator and evaluation commands. Browser verification covers the actual Streamlit pages and key interactions; see the test results in the project handoff. The normalized database path and analytical queries were exercised against a live MySQL 8.0 server. Docker Compose configuration validates, but a container run still needs a working Docker daemon. The browser screenshots above were captured from the running app.
+The latest local check runs the full automated suite, lint, syntax compilation, generator and evaluation commands. Browser verification covers the actual Streamlit pages and key interactions; see the test results in the project handoff. Docker Compose built and ran the app with MySQL 8.4.11 on Docker Desktop: both containers were healthy, the web endpoint returned HTTP 200, all nine workspace pages rendered without exceptions, MySQL save/load returned the expected 14 records, and the bundled analytical queries ran. The browser screenshots above were captured from the running app.
 
 Six notebooks cover data understanding, EDA, leakage-safe features, forecasting, inventory and model comparison. Regenerate them with `python -m scripts.create_notebooks`; they call the same tested application functions rather than duplicate a second modeling pipeline.
 

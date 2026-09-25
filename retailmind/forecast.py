@@ -105,7 +105,7 @@ def _recursive_ml(history: pd.Series, horizon: int, name: str) -> np.ndarray:
     extended = history.copy()
     output = []
     for _ in range(horizon):
-        tomorrow = extended.index.max() + pd.Timedelta(days=1)
+        tomorrow = extended.index.max() + pd.offsets.Day(1)
         candidate = pd.concat([extended, pd.Series([np.nan], index=[tomorrow])])
         row = make_features(candidate).iloc[[-1]][list(FEATURES)]
         prediction = max(0.0, float(model.predict(row)[0]))
@@ -194,7 +194,7 @@ def run_forecast(series: pd.Series, horizon: int = 14, include_ml: bool = True, 
     target_coverage = 0.90
     rank = min(len(chosen_errors), int(np.ceil((len(chosen_errors) + 1) * target_coverage))) - 1
     width = float(chosen_errors[rank])
-    future_dates = pd.date_range(series.index.max() + pd.Timedelta(days=1), periods=horizon, freq="D")
+    future_dates = pd.date_range(series.index.max() + pd.offsets.Day(1), periods=horizon, freq="D")
     future = pd.DataFrame({"date": future_dates, "forecast": point, "lower": np.maximum(0, point - width), "upper": point + width})
     history = pd.DataFrame({"date": series.index, "units": series.to_numpy()})
     label = f"90% target band from {len(chosen_errors)} rolling-origin absolute errors"
@@ -224,7 +224,7 @@ def explain_next_day(series: pd.Series, name: str) -> pd.DataFrame:
         return pd.DataFrame(columns=["feature", "signed_change", "direction"])
     model = fit_model(series, name)
     features = make_features(series).dropna()[list(FEATURES)]
-    tomorrow = series.index.max() + pd.Timedelta(days=1)
+    tomorrow = series.index.max() + pd.offsets.Day(1)
     candidate = pd.concat([series, pd.Series([np.nan], index=[tomorrow])])
     row = make_features(candidate).iloc[[-1]][list(FEATURES)]
     baseline = float(model.predict(row)[0])
