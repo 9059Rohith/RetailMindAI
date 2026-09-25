@@ -16,6 +16,8 @@ The M5 importer accepts the three official CSVs through the browser. The configu
 
 `docker compose up --build` starts the app at `http://localhost:8501` and a MySQL 8.4 container with a local development password. The app checks the MySQL connection and falls back to SQLite if unavailable. The database service is initialized from `sql/schema.sql`, `sql/indexes.sql` and `sql/seed.sql`; example reports are in `sql/analytical_queries.sql`. Change the example passwords before any network-exposed deployment.
 
+The normalized save/load path was also exercised against a live MySQL 8.0.46 server in WSL: schema, indexes and seed loaded; 280 generated records populated product/store/calendar/sales/inventory/promotion/price tables; a second save replaced the active sales, inventory, price and snapshot rows with 14 records; all analytical queries executed. This verifies the SQL path independently of Docker. Docker Compose configuration validates, but the local Docker Desktop daemon could not start, so a containerized runtime check remains open.
+
 ## Verification
 
 Run `python -m pytest -q`, `python -m ruff check .`, `python -m scripts.generate_demo`, `python -m scripts.evaluate`, then `streamlit run app/main.py`. The workflow template in `ci/quality-gates.yml` repeats lint, tests, generator, evaluation and syntax compilation once copied to `.github/workflows/ci.yml` by a credential with GitHub's `workflow` permission. Hosted CI is not currently active.

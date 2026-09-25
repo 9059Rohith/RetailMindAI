@@ -68,5 +68,11 @@ def test_m5_import_preserves_provenance_and_missing_inventory():
     assert version["dataset_id"] == dataset_metadata(imported.data.copy(), "M5 sample")["dataset_id"]
     streamed = read_m5_sample(BytesIO(sales), BytesIO(calendar), BytesIO(prices), max_series=2, max_days=2)
     assert streamed.data.equals(imported.data)
+    with_events = read_m5_sample(
+        sales,
+        b"d,date,wm_yr_wk,event_name_1\nd_1,2011-01-29,11101,\nd_2,2011-01-30,11101,Holiday\nd_3,2011-01-31,11102,\n",
+        prices, max_series=2, max_days=2,
+    )
+    assert with_events.data.holiday.sum() == 2
     with pytest.raises(ValueError, match="calendar does not cover"):
         read_m5_sample(sales, b"d,date,wm_yr_wk\nd_1,2011-01-29,11101\n", prices)

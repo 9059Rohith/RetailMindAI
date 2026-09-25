@@ -1,11 +1,15 @@
 """Guard the data-quality route against malformed user uploads."""
+from pathlib import Path
+
 from streamlit.testing.v1 import AppTest
 
 from retailmind.data import read_m5_sample, read_sales_csv
 
+APP = Path(__file__).resolve().parents[1] / "app" / "main.py"
+
 
 def test_all_invalid_dates_reach_quality_review_without_crashing():
-    app = AppTest.from_file("app/main.py", default_timeout=120).run()
+    app = AppTest.from_file(APP, default_timeout=120).run()
     app.session_state["dataset"] = read_sales_csv(
         b"date,product_id,store_id,units,price,stock\nnot-a-date,P1,S1,2,10,4\n"
     )
@@ -18,7 +22,7 @@ def test_all_invalid_dates_reach_quality_review_without_crashing():
 
 
 def test_demo_analytics_shows_holiday_and_seasonality_views():
-    app = AppTest.from_file("app/main.py", default_timeout=120).run()
+    app = AppTest.from_file(APP, default_timeout=120).run()
     next(radio for radio in app.radio if radio.label == "Workspace").set_value("Analytics").run()
     assert not app.exception
     assert any(metric.label == "Monthly pattern" for metric in app.metric)
@@ -31,7 +35,7 @@ def test_m5_mode_disables_inventory_without_fabricating_stock():
     calendar = b"d,date,wm_yr_wk\nd_1,2011-01-29,11101\nd_2,2011-01-30,11101\n"
     prices = b"store_id,item_id,wm_yr_wk,sell_price\nCA_1,FOOD_1,11101,2.5\n"
     imported = read_m5_sample(sales, calendar, prices, 1, 2)
-    app = AppTest.from_file("app/main.py", default_timeout=120).run()
+    app = AppTest.from_file(APP, default_timeout=120).run()
     app.session_state["dataset"] = imported.data
     app.session_state["mode"] = "m5"
     app.radio[0].set_value("Overview").run()

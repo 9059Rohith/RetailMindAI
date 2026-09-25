@@ -99,7 +99,10 @@ def read_m5_sample(sales_csv: bytes | BytesIO, calendar_csv: bytes | BytesIO, pr
                          key=lambda col: int(col[2:]))[-max_days:]
     if sales.empty or not day_columns:
         raise ValueError("M5 sales has no selected series or d_ day columns.")
-    dates = calendar[["d", "date", "wm_yr_wk"]].drop_duplicates("d")
+    event_columns = [column for column in ("event_name_1", "event_name_2") if column in calendar]
+    if event_columns:
+        calendar["holiday"] = calendar[event_columns].notna().any(axis=1)
+    dates = calendar[["d", "date", "wm_yr_wk"] + (["holiday"] if event_columns else [])].drop_duplicates("d")
     if not set(day_columns).issubset(set(dates.d)):
         raise ValueError("M5 calendar does not cover every selected sales day.")
     long = sales[list(identity) + day_columns].melt(id_vars=list(identity), value_vars=day_columns,
@@ -130,6 +133,8 @@ def read_m5_sample(sales_csv: bytes | BytesIO, calendar_csv: bytes | BytesIO, pr
                           "region": long.state_id, "units": long.units, "price": long.sell_price,
                           "stock": np.nan, "unit_cost": np.nan, "stockout": False,
                           "supplier": "Not supplied", "lead_time": 7})
+    if "holiday" in long:
+        frame["holiday"] = long.holiday
     frame = enrich(frame)
     if frame.date.isna().any() or frame.units.isna().any():
         raise ValueError("M5 sample has invalid calendar dates or sales quantities.")

@@ -74,6 +74,10 @@ def _save_mysql_dimensions_and_facts(data: pd.DataFrame, engine: Engine) -> None
     region = source.region.fillna("Unknown").astype(str)
     supplier = source.supplier.fillna("Unknown").astype(str)
     with engine.begin() as connection:
+        # The UI stores one current dataset, so facts must mirror its snapshot.
+        # Keep dimensions for existing forecast/model references.
+        for table in ("promotions", "prices", "sales", "inventory"):
+            connection.execute(text(f"DELETE FROM {table}"))
         execute(connection, "INSERT INTO categories(category_id,category_name) VALUES (:id,:name) ON DUPLICATE KEY UPDATE category_name=VALUES(category_name)",
                 [{"id": item, "name": item} for item in sorted(category.unique())])
         execute(connection, "INSERT INTO regions(region_id,region_name) VALUES (:id,:name) ON DUPLICATE KEY UPDATE region_name=VALUES(region_name)",
@@ -94,7 +98,6 @@ def _save_mysql_dimensions_and_facts(data: pd.DataFrame, engine: Engine) -> None
                 [{"date": row.date.date(), "weekday": int(row.date.dayofweek), "month": int(row.date.month),
                   "year": int(row.date.year), "holiday": bool(getattr(row, "holiday", False))}
                  for row in days.itertuples()])
-        connection.execute(text("DELETE FROM promotions"))
         execute(connection, "INSERT INTO promotions(product_id,store_id,start_date,end_date,discount_rate) VALUES (:product,:store,:date,:date,:discount)",
                 [{"product": str(row.product_id), "store": str(row.store_id), "date": row.date.date(),
                   "discount": float(row.discount) if pd.notna(row.discount) else 0.0}

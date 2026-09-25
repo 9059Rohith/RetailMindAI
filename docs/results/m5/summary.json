@@ -1,0 +1,36 @@
+{
+  "source": "https://doi.org/10.5281/zenodo.10203108",
+  "sales_sha256": "4b4a47c44c38380d2a9168216fea8c9ff2f31b1ddb772f8a0995952a038b8aa0",
+  "series": 30490,
+  "horizon_days": 28,
+  "training_days": 365,
+  "holdout_start": "2016-04-25",
+  "holdout_end": "2016-05-22",
+  "zero_actual_series": 812,
+  "baselines_all_series": {
+    "Naive": {
+      "WAPE": 95.1621,
+      "MAE": 1.373,
+      "RMSE": 2.8936,
+      "Bias": 0.1903
+    },
+    "Seasonal naive": {
+      "WAPE": 86.2181,
+      "MAE": 1.244,
+      "RMSE": 2.6769,
+      "Bias": -0.1062
+    },
+    "Moving average": {
+      "WAPE": 73.8643,
+      "MAE": 1.0657,
+      "RMSE": 2.243,
+      "Bias": -0.0564
+    }
+  },
+  "sample_model_comparisons": 9,
+  "price_coverage_sample": {
+    "rows": 3537,
+    "missing_prices": 0,
+    "holiday_labeled_rows": 288
+  }
+}
