@@ -21,6 +21,7 @@ h1 {font-size:2.25rem!important;font-weight:800!important;} h2 {font-size:1.4rem
 .stButton>button[kind="primary"] {background:#47d4db;color:#07131e;border:0;font-weight:700;border-radius:9px;}
 .stButton>button {border-radius:9px;border-color:#36516d;font-weight:600;}
 .stButton>button:hover {border-color:#49d5db;color:#49d5db;}
+.stButton>button[kind="primary"]:hover {background:#60e2e7;border-color:#60e2e7;color:#07131e;}
 .stSelectbox label,.stDateInput label,.stNumberInput label,.stSlider label,.stFileUploader label {font-size:.82rem!important;color:#bac9dc!important;font-weight:600!important;}
 .eyebrow {text-transform:uppercase;letter-spacing:.16em;color:#66dfe4;font-size:.7rem;font-weight:700;}
 .subtle {color:#a9bad0;font-size:1rem;margin-top:-.55rem;}

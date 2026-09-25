@@ -28,10 +28,12 @@ def product_summary(data: pd.DataFrame) -> pd.DataFrame:
     if data.empty:
         return pd.DataFrame()
     keys = ["product_id", "product", "category"]
-    grouped = data.groupby(keys).agg(units=("units", "sum"), revenue=("revenue", "sum"), profit=("profit", "sum"),
-                                      daily_mean=("units", "mean"), daily_std=("units", "std"), stockouts=("stockout", "mean"))
-    latest = data.sort_values("date").groupby(keys)["stock"].last()
-    grouped["stock"] = latest
+    grouped = data.groupby(keys).agg(units=("units", "sum"), revenue=("revenue", "sum"), profit=("profit", "sum"), stockouts=("stockout", "mean"))
+    daily = data.groupby(keys + ["date"], as_index=False)["units"].sum()
+    demand = daily.groupby(keys)["units"].agg(daily_mean="mean", daily_std="std")
+    grouped[["daily_mean", "daily_std"]] = demand
+    latest_per_store = data.sort_values("date").groupby(keys + ["store_id"], as_index=False)["stock"].last()
+    grouped["stock"] = latest_per_store.groupby(keys)["stock"].sum()
     grouped["margin_pct"] = np.where(grouped.revenue > 0, grouped.profit / grouped.revenue * 100, 0)
     grouped["demand_cv"] = grouped.daily_std.fillna(0) / grouped.daily_mean.replace(0, np.nan)
     grouped["days_cover"] = grouped.stock / grouped.daily_mean.replace(0, np.nan)

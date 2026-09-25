@@ -320,6 +320,7 @@ def inventory_page(data: pd.DataFrame, plan: pd.DataFrame) -> None:
     with planner:
         st.caption("Safety stock = z × daily demand standard deviation × √lead time. Reorder point = mean lead-time demand + safety stock. EOQ assumes fixed order and annual holding costs.")
         shown = plan[["product", "store", "stock", "daily_mean", "days_cover", "lead_time", "safety_stock", "reorder_point", "eoq", "recommended_order", "risk", "reason"]].copy()
+        shown.columns = ["Product", "Store", "Current stock", "Daily demand", "Days of cover", "Lead time", "Safety stock", "Reorder point", "EOQ", "Order units", "Risk", "Reason"]
         st.dataframe(shown.round(1), hide_index=True, width="stretch")
         download_csv("Download recommendations", plan, "replenishment.csv")
     with segments:
@@ -437,10 +438,12 @@ def main() -> None:
     plan = cached_plan(filtered, 0.95)
     pages = {"Overview": overview, "Data studio": data_studio, "Analytics": analytics, "Forecast lab": forecast_lab,
              "Inventory": inventory_page, "Scenarios": scenarios, "Insights": insights_page, "Reports": reports}
-    if page in {"Overview", "Inventory", "Scenarios", "Insights", "Reports"}:
-        pages[page](filtered, plan)
-    else:
-        pages[page](all_data if page == "Data studio" else filtered)
+    page_slot = st.empty()
+    with page_slot.container():
+        if page in {"Overview", "Inventory", "Scenarios", "Insights", "Reports"}:
+            pages[page](filtered, plan)
+        else:
+            pages[page](all_data if page == "Data studio" else filtered)
     st.markdown('<p class="footer-note">RetailMind AI · Observations, forecasts and simulations are labeled separately. Inventory recommendations require business review.</p>', unsafe_allow_html=True)
 
 

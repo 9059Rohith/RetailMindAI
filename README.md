@@ -48,6 +48,15 @@ The interface uses a midnight analytics theme with a consistent global filter ba
 <!-- The screenshot below is captured from the running application, not a design mockup. -->
 ![RetailMind AI dashboard](docs/images/dashboard.png)
 
+<details>
+<summary>See the Forecast lab and Inventory planner</summary>
+
+![Forecast lab with held-out model metrics and future demand](docs/images/forecast.png)
+
+![Inventory planner with safety stock and reorder recommendations](docs/images/inventory.png)
+
+</details>
+
 ## Quick start
 
 Requires **Python 3.12+**.
