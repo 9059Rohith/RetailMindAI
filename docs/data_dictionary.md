@@ -18,5 +18,8 @@ Minimum CSV fields: `date`, `product_id`, `store_id`, `units`, `price`, `stock`.
 | `revenue` | `units × price` | INR |
 | `profit` | `units × (price − unit_cost)`; gross only | INR |
 | `supplier`, `weather` | Optional explanatory labels | Text |
+| `latitude`, `longitude` | Optional store coordinates for a geographic view | Decimal degrees |
 
 Missing optional dimensions are filled with explicit `Unknown` labels. Missing cost defaults to 70% of selling price solely to make a minimal CSV analyzable; override it for real margin analysis. Invalid dates or IDs are quarantined only when **Auto clean** is pressed. An operation log and original session copy are retained for restoration.
+
+The M5 importer is separate from the minimum retail CSV path. It maps `item_id` to `product_id`, `state_id` to `region`, day columns through `calendar.csv`, and weekly `sell_price` through `sell_prices.csv`. It preserves unavailable stock and unit cost as missing; those are not estimated. M5 monetary values retain the source dataset's currency and should not be interpreted as INR.

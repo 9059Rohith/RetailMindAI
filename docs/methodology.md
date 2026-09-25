@@ -7,7 +7,7 @@
 | Sales KPIs and category rankings | Observation | Aggregates of selected historical records |
 | Promotion comparison and price association | Statistical association | Confounded by seasonality, product mix and other variables |
 | Future demand | Model prediction | Extrapolation evaluated on earlier held-out periods |
-| Forecast band | Heuristic uncertainty | MAE-scaled visual range; coverage is not calibrated |
+| Forecast band | Empirical uncertainty | Held-out absolute-error quantile; future coverage is not guaranteed |
 | Risk and reorder quantity | Policy recommendation | Formula result using chosen service level and cost assumptions |
 | What-if result | Simulation | Assumed elasticity and promotion uplift, not causal impact |
 | Allocation | Optimization | Maximum weighted fulfillment under a single supply constraint |

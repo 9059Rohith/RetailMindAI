@@ -10,9 +10,11 @@
 
 Streamlit Community Cloud's local filesystem is ephemeral. Do not treat local artifacts or SQLite as durable shared storage. The public demo has no login or per-user database isolation; do not upload sensitive retail data.
 
+The M5 importer accepts the three official CSVs through the browser. The configured upload cap is 300 MB per file. Large benchmark imports can exceed a free host's memory or request limits; use the local Docker or Python setup for full official files, and keep the sample size bounded in the M5 tab.
+
 ## Local Docker
 
-`docker compose up --build` starts the app at `http://localhost:8501` and a MySQL 8.4 container with a local development password. The app checks the MySQL connection and falls back to SQLite if unavailable. The database service is initialized from `sql/mysql_schema.sql`. Change the example passwords before any network-exposed deployment.
+`docker compose up --build` starts the app at `http://localhost:8501` and a MySQL 8.4 container with a local development password. The app checks the MySQL connection and falls back to SQLite if unavailable. The database service is initialized from `sql/schema.sql`, `sql/indexes.sql` and `sql/seed.sql`; example reports are in `sql/analytical_queries.sql`. Change the example passwords before any network-exposed deployment.
 
 ## Verification
 

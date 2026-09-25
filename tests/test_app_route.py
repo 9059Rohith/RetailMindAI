@@ -1,7 +1,7 @@
 """Guard the data-quality route against malformed user uploads."""
 from streamlit.testing.v1 import AppTest
 
-from retailmind.data import read_sales_csv
+from retailmind.data import read_m5_sample, read_sales_csv
 
 
 def test_all_invalid_dates_reach_quality_review_without_crashing():
@@ -15,3 +15,20 @@ def test_all_invalid_dates_reach_quality_review_without_crashing():
     assert app.title[0].value == "Data studio"
     assert any("invalid dates" in warning.value for warning in app.warning)
     assert any(metric.label == "Health score" and metric.value == "0%" for metric in app.metric)
+
+
+def test_m5_mode_disables_inventory_without_fabricating_stock():
+    sales = b"item_id,cat_id,store_id,state_id,d_1,d_2\nFOOD_1,FOODS,CA_1,CA,2,3\n"
+    calendar = b"d,date,wm_yr_wk\nd_1,2011-01-29,11101\nd_2,2011-01-30,11101\n"
+    prices = b"store_id,item_id,wm_yr_wk,sell_price\nCA_1,FOOD_1,11101,2.5\n"
+    imported = read_m5_sample(sales, calendar, prices, 1, 2)
+    app = AppTest.from_file("app/main.py", default_timeout=120).run()
+    app.session_state["dataset"] = imported.data
+    app.session_state["mode"] = "m5"
+    app.radio[0].set_value("Overview").run()
+    assert not app.exception
+    assert any("M5 benchmark mode" in item.value for item in app.info)
+    assert any(metric.label == "Gross margin" and metric.value == "Unavailable" for metric in app.metric)
+    app.radio[0].set_value("Inventory").run()
+    assert not app.exception
+    assert any("Inventory planning and scenarios need observed stock" in item.value for item in app.warning)

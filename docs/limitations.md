@@ -4,4 +4,4 @@ The bundled dataset is synthetic; its seasonality, discounts and stock events we
 
 Forecast evaluation is series-specific and runs on demand. Sparse intermittent products may require Croston-style methods or probabilistic models. The forecast band is heuristic and uncalibrated. Stock risk is a transparent score, not a fitted stockout probability. EOQ omits supplier minimums, expiry, storage limits and transport. Allocation uses one supply pool and priority weights without equity constraints. The quick database save is designed for demo round trips; a production system needs tenant isolation, authentication, migrations, durable storage and audited model registry.
 
-Future experiments: M5-based external validation, calibrated conformal intervals, hierarchical reconciliation, promotion uplift designs with credible controls, multi-echelon allocation, perishability-aware optimization and drift monitoring.
+Future experiments: broad M5 external validation beyond a bounded sample, calibrated conformal intervals, hierarchical reconciliation, promotion uplift designs with credible controls, multi-echelon allocation, perishability-aware optimization and drift monitoring.

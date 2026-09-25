@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from retailmind.forecast import backtest, load_artifact, make_features, metrics, predict, run_forecast, save_artifact
+from retailmind.forecast import (backtest, explain_next_day, list_artifacts, load_artifact, make_features,
+                                 metrics, predict, register_artifact, run_forecast, save_artifact)
 
 
 def series():
@@ -40,7 +41,13 @@ def test_backtest_and_forecast_are_time_aware():
     assert result.future.date.min() > history.index.max()
     assert (result.future.lower <= result.future.forecast).all()
     assert (result.future.forecast <= result.future.upper).all()
+    assert len(result.residuals) == len(result.folds) * 7
+    assert (result.residuals.actual - result.residuals.predicted == result.residuals.residual).all()
+    assert "90% target" in result.interval_label
     assert (predict(history, 7, "Seasonal naive") >= 0).all()
+    local = explain_next_day(history, "Random forest")
+    assert len(local) == len(result.features)
+    assert np.isfinite(local.signed_change).all()
 
 
 def test_statistical_models_return_nonnegative_future_values():
@@ -60,3 +67,8 @@ def test_saved_model_run_has_reproducible_state(tmp_path):
     assert loaded["winner"] == result.winner
     assert loaded["model"] is not None
     pd.testing.assert_frame_equal(loaded["future"], result.future)
+    registered = register_artifact(result, tmp_path / "registry", "dataset-v1")
+    catalog = list_artifacts(tmp_path / "registry")
+    assert registered.exists()
+    assert catalog.iloc[0]["dataset_version"] == "dataset-v1"
+    assert catalog.iloc[0]["horizon"] == 7

@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from retailmind.analytics import kpis, product_summary
+from retailmind.analytics import demand_signals, dimension_summary, kpis, product_summary
 from retailmind.data import enrich
 
 
@@ -15,6 +15,9 @@ def test_kpis_use_sales_not_snapshot_stock():
     assert result["margin"] == 50
     assert result["growth"] == pytest.approx(200)
     assert product_summary(data).iloc[0].stock == 80
+    store = dimension_summary(data, "store").iloc[0]
+    assert store.latest_stock == 80
+    assert store.latest_month_growth_pct == pytest.approx(200)
 
 
 def test_product_summary_aggregates_daily_demand_and_latest_stock_across_stores():
@@ -25,3 +28,19 @@ def test_product_summary_aggregates_daily_demand_and_latest_stock_across_stores(
     assert row.daily_mean == 7
     assert row.stock == 23
     assert row.days_cover == pytest.approx(23 / 7)
+
+
+def test_demand_anomaly_uses_prior_history_and_dead_stock_needs_observed_age():
+    dates = pd.date_range("2025-01-01", periods=45)
+    data = enrich(pd.DataFrame({"date": dates, "product_id": "P1", "store_id": "S1",
+                                "units": [10] * 44 + [100], "price": 10, "stock": 30}))
+    signals, observations = demand_signals(data)
+    assert signals["anomalies"] >= 1
+    assert bool(observations.iloc[-1].anomaly)
+    assert observations.iloc[-1].expected_units == 10
+    idle = data.copy()
+    idle["units"] = 0
+    idle = enrich(idle)
+    row = product_summary(idle).iloc[0]
+    assert row.dead_stock
+    assert row.days_since_sale == 45

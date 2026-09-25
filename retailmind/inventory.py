@@ -2,11 +2,21 @@
 from __future__ import annotations
 
 from math import ceil, sqrt
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 from scipy.optimize import linprog
 from scipy.stats import norm
+
+
+@dataclass(frozen=True)
+class RiskSettings:
+    dead_stock_days: int = 30
+    excess_cover_days: int = 60
+    volatility_points: int = 8
+    stockout_points: int = 10
+    forecast_error_points: int = 10
 
 
 def safety_stock(daily_std: float, lead_time: int, service_level: float = 0.95) -> int:
@@ -27,27 +37,43 @@ def economic_order_quantity(annual_demand: float, order_cost: float, annual_hold
     return ceil(sqrt(2 * annual_demand * order_cost / annual_holding_cost))
 
 
-def abc_xyz(summary: pd.DataFrame) -> pd.DataFrame:
+def abc_xyz(summary: pd.DataFrame, abc_a: float = 0.8, abc_b: float = 0.95,
+            xyz_x: float = 0.5, xyz_y: float = 1.0) -> pd.DataFrame:
+    if not 0 < abc_a < abc_b < 1 or not 0 < xyz_x < xyz_y:
+        raise ValueError("ABC and XYZ thresholds must increase within their valid ranges.")
     data = summary.copy().sort_values("revenue", ascending=False)
     total = data.revenue.sum()
     cumulative_before = data.revenue.cumsum().shift(fill_value=0) / total if total else pd.Series(0, index=data.index)
-    data["abc"] = np.select([cumulative_before < 0.8, cumulative_before < 0.95], ["A", "B"], default="C")
+    data["abc"] = np.select([cumulative_before < abc_a, cumulative_before < abc_b], ["A", "B"], default="C")
     cv = data.demand_cv.fillna(float("inf"))
-    data["xyz"] = np.select([cv < 0.5, cv < 1.0], ["X", "Y"], default="Z")
+    data["xyz"] = np.select([cv < xyz_x, cv < xyz_y], ["X", "Y"], default="Z")
     data["segment"] = data.abc + data.xyz
+    value_action = {"A": "Review frequently", "B": "Review weekly", "C": "Review periodically"}
+    variability_action = {"X": "use lean cover", "Y": "hold moderate buffer", "Z": "hold variability buffer"}
+    data["strategy"] = [f"{value_action[a]}; {variability_action[z]}" for a, z in zip(data.abc, data.xyz)]
     return data
 
 
-def plan_replenishment(data: pd.DataFrame, service_level: float = 0.95, order_cost: float = 350, holding_rate: float = 0.2) -> pd.DataFrame:
+def plan_replenishment(data: pd.DataFrame, service_level: float = 0.95, order_cost: float = 350,
+                       holding_rate: float = 0.2, risk_settings: RiskSettings | None = None,
+                       forecast_error_rates: dict[tuple[str, str], float] | None = None) -> pd.DataFrame:
     """Plan per product/store from observed mean and variability; use latest stock only."""
     if data.empty:
         return pd.DataFrame()
+    policy = risk_settings or RiskSettings()
+    if policy.dead_stock_days < 1 or policy.excess_cover_days < 1 or min(policy.volatility_points, policy.stockout_points, policy.forecast_error_points) < 0:
+        raise ValueError("Risk settings must be positive day thresholds and nonnegative weights.")
     keys = ["product_id", "product", "category", "store_id", "store", "region", "supplier"]
     grouped = data.groupby(keys).agg(daily_mean=("units", "mean"), daily_std=("units", "std"), revenue=("revenue", "sum"),
                                       stockout_rate=("stockout", "mean"), unit_cost=("unit_cost", "mean"), lead_time=("lead_time", "median"))
     latest = data.sort_values("date").groupby(keys)["stock"].last()
     grouped["stock"] = latest
+    last_sale = data[data.units.gt(0)].groupby(keys)["date"].max()
+    grouped["last_sale_date"] = last_sale
     result = grouped.reset_index()
+    observed_days = int((data.date.max() - data.date.min()).days) + 1
+    result["days_since_sale"] = (data.date.max() - result.last_sale_date).dt.days.fillna(observed_days).astype(int)
+    result["dead_stock"] = result.stock.gt(0) & result.days_since_sale.ge(policy.dead_stock_days)
     result["daily_std"] = result.daily_std.fillna(0)
     result["lead_time"] = result.lead_time.fillna(7).clip(lower=1).round().astype(int)
     result["safety_stock"] = [safety_stock(float(std), int(lead), service_level) for std, lead in zip(result.daily_std, result.lead_time)]
@@ -55,14 +81,21 @@ def plan_replenishment(data: pd.DataFrame, service_level: float = 0.95, order_co
     holding = np.maximum(result.unit_cost.fillna(1).to_numpy() * holding_rate, 0.01)
     result["eoq"] = [economic_order_quantity(float(mean) * 365, order_cost, float(cost)) for mean, cost in zip(result.daily_mean, holding)]
     result["days_cover"] = result.stock / result.daily_mean.replace(0, np.nan)
+    result["demand_cv"] = result.daily_std / result.daily_mean.replace(0, np.nan)
+    rates = forecast_error_rates or {}
+    result["forecast_error_rate"] = [max(0.0, float(rates.get((product, store), 0.0)))
+                                     for product, store in zip(result.product_id, result.store_id)]
     result["projected_lead_stock"] = result.stock - result.daily_mean * result.lead_time
     result["shortfall"] = (result.reorder_point - result.stock).clip(lower=0)
     result["recommended_order"] = np.where(result.shortfall > 0, np.maximum(result.shortfall, result.eoq), 0).astype(int)
-    severity = np.where(result.stock <= 0, 100, np.where(result.projected_lead_stock < 0, 85, np.where(result.stock < result.reorder_point, 62, np.where(result.days_cover > 60, 35, 12))))
-    result["risk_score"] = np.minimum(100, severity + (result.stockout_rate * 10).round()).astype(int)
+    severity = np.where(result.stock <= 0, 100, np.where(result.projected_lead_stock < 0, 85, np.where(result.stock < result.reorder_point, 62, np.where(result.dead_stock | result.days_cover.gt(policy.excess_cover_days), 35, 12))))
+    adjustment = (result.stockout_rate * policy.stockout_points
+                  + result.demand_cv.fillna(0).clip(0, 2) * policy.volatility_points
+                  + result.forecast_error_rate.clip(0, 2) * policy.forecast_error_points)
+    result["risk_score"] = np.minimum(100, severity + adjustment.round()).astype(int)
     result["risk"] = pd.cut(result.risk_score, bins=[-1, 24, 49, 74, 100], labels=["Low", "Medium", "High", "Critical"])
-    result["reason"] = np.select([result.stock.le(0), result.projected_lead_stock.lt(0), result.stock.lt(result.reorder_point), result.days_cover.gt(60)],
-                                 ["Stock depleted", "Projected demand exceeds stock before delivery", "Below reorder point", "Excess cover above 60 days"], default="Within target cover")
+    result["reason"] = np.select([result.stock.le(0), result.projected_lead_stock.lt(0), result.stock.lt(result.reorder_point), result.dead_stock, result.days_cover.gt(policy.excess_cover_days)],
+                                 ["Stock depleted", "Projected demand exceeds stock before delivery", "Below reorder point", f"No sales in {policy.dead_stock_days} observed days", f"Excess cover above {policy.excess_cover_days} days"], default="Within target cover")
     return result.sort_values(["risk_score", "shortfall"], ascending=False).reset_index(drop=True)
 
 
