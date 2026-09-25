@@ -1,0 +1,32 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      DATABASE_MODE: mysql
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: retailmind
+      MYSQL_USER: retailmind
+      MYSQL_PASSWORD: retailmind_local
+    depends_on:
+      mysql:
+        condition: service_healthy
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: retailmind
+      MYSQL_USER: retailmind
+      MYSQL_PASSWORD: retailmind_local
+      MYSQL_ROOT_PASSWORD: root_local_only
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/mysql_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u retailmind -pretailmind_local"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+volumes:
+  mysql_data:

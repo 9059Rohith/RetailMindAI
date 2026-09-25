@@ -1,0 +1,9 @@
+# Forecasting and validation
+
+`retailmind/forecast.py` aggregates demand to one daily product series, optionally narrowed to a store. Missing days are zero-filled. Feature generation uses `shift(1)` before rolling windows. Lag 1/7/14/28 and 7/28-day rolling statistics therefore cannot see current or future target values. Calendar features are known ahead of time. Future price, inventory and promotion are omitted because they are not known without an explicit scenario.
+
+Backtests use three expanding windows. Each fold trains only through its origin date and predicts the next horizon. Models: naive, seasonal naive, 28-day moving average, simple exponential smoothing, random forest and histogram gradient boosting when history is long enough. ML forecasts are recursive: each predicted day is appended before generating the next day's lag features. Ranking uses mean fold WAPE, then MAE. This approach is time aware, but recursive forecasts can accumulate errors.
+
+Metrics include MAE, RMSE, MAPE (nonzero actual days), sMAPE, WAPE, MASE (seasonal 7-day scale), R², bias, underforecast and overforecast. WAPE is undefined for all-zero actual demand; the UI's comparison should be interpreted with that limit. The displayed interval uses `1.645 × backtest MAE × sqrt(step / min(horizon,14))`. It is a heuristic visual range, **not a calibrated 90% interval**. Saved artifacts contain future values, comparison metrics, selected model name, features, timestamp and dataset hash; they do not contain the fitted estimator.
+
+Run `python -m scripts.evaluate --product P001 --horizon 14` to reproduce a CSV of fold metrics.
