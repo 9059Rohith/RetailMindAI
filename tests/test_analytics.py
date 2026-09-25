@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from retailmind.analytics import demand_signals, dimension_summary, kpis, product_summary
+from retailmind.analytics import demand_signals, dimension_summary, holiday_effect, kpis, product_summary
 from retailmind.data import enrich
 
 
@@ -44,3 +44,13 @@ def test_demand_anomaly_uses_prior_history_and_dead_stock_needs_observed_age():
     row = product_summary(idle).iloc[0]
     assert row.dead_stock
     assert row.days_since_sale == 45
+
+
+def test_holiday_comparison_uses_supplied_labels_and_reports_missing_labels():
+    data = enrich(pd.DataFrame({"date": ["2025-01-01", "2025-01-02"], "product_id": ["P1", "P1"],
+                                "store_id": ["S1", "S1"], "units": [12, 4], "price": [10, 10],
+                                "stock": [20, 16], "holiday": [True, False]}))
+    comparison = holiday_effect(data).set_index("holiday")
+    assert comparison.loc[True, "mean_units"] == 12
+    assert comparison.loc[False, "mean_revenue"] == 40
+    assert holiday_effect(data.drop(columns="holiday")).empty

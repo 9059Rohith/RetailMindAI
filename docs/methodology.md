@@ -5,7 +5,7 @@
 | Output | Status | Interpretation |
 | --- | --- | --- |
 | Sales KPIs and category rankings | Observation | Aggregates of selected historical records |
-| Promotion comparison and price association | Statistical association | Confounded by seasonality, product mix and other variables |
+| Promotion/holiday comparisons and price association | Statistical association | Confounded by seasonality, product mix and other variables |
 | Future demand | Model prediction | Extrapolation evaluated on earlier held-out periods |
 | Forecast band | Empirical uncertainty | Held-out absolute-error quantile; future coverage is not guaranteed |
 | Risk and reorder quantity | Policy recommendation | Formula result using chosen service level and cost assumptions |

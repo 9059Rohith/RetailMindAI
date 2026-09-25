@@ -73,6 +73,15 @@ def promotion_effect(data: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def holiday_effect(data: pd.DataFrame) -> pd.DataFrame:
+    """Compare observed holiday and ordinary records when labels are supplied."""
+    if "holiday" not in data:
+        return pd.DataFrame(columns=["holiday", "mean_units", "mean_revenue", "observations"])
+    return data.groupby("holiday", as_index=False).agg(mean_units=("units", "mean"),
+                                                      mean_revenue=("revenue", "mean"),
+                                                      observations=("units", "size"))
+
+
 def weekday_pattern(data: pd.DataFrame) -> pd.DataFrame:
     result = data.assign(weekday=pd.to_datetime(data["date"]).dt.day_name()).groupby("weekday", as_index=False).agg(mean_units=("units", "mean"))
     order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]

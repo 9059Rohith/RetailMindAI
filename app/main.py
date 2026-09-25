@@ -18,7 +18,8 @@ import streamlit as st
 
 from app.styles import CSS
 from retailmind.analytics import (approximate_price_relationship, daily_trend, demand_signals,
-                                   dimension_summary, kpis, product_summary, promotion_effect, weekday_pattern)
+                                   dimension_summary, holiday_effect, kpis, product_summary,
+                                   promotion_effect, weekday_pattern)
 from retailmind.data import (SyntheticConfig, assess_quality, clean_data, dataset_metadata, enrich,
                              generate_retail_data, read_m5_sample, read_sales_csv)
 from retailmind.database import database_engine, load_sales, save_sales
@@ -330,6 +331,19 @@ def analytics(data: pd.DataFrame) -> None:
             promoted = effect.loc[labels.eq("true")].iloc[0]
             change = (promoted.mean_units / ordinary.mean_units - 1) * 100 if ordinary.mean_units else float("nan")
             st.caption(f"Observed promoted days: {promoted.mean_units - ordinary.mean_units:+.1f} units and {currency}{promoted.mean_revenue - ordinary.mean_revenue:+,.0f} revenue per record versus non-promoted days ({change:+.1f}% units). This comparison is not a causal uplift estimate.")
+        holidays = holiday_effect(data)
+        if holidays.empty:
+            st.info("Holiday labels are unavailable for this dataset.")
+        else:
+            chart(px.bar(holidays, x="holiday", y="mean_units", color="holiday",
+                         title="Holiday vs ordinary observations",
+                         labels={"holiday": "Holiday", "mean_units": "Mean units per record"},
+                         color_discrete_sequence=[COLORS[2], COLORS[0]]), 310)
+            holiday_labels = holidays.holiday.astype(str).str.lower()
+            if set(holiday_labels) == {"false", "true"}:
+                ordinary = holidays.loc[holiday_labels.eq("false")].iloc[0]
+                holiday = holidays.loc[holiday_labels.eq("true")].iloc[0]
+                st.caption(f"Holiday-labeled records average {holiday.mean_units - ordinary.mean_units:+.1f} units and {currency}{holiday.mean_revenue - ordinary.mean_revenue:+,.0f} revenue per record versus ordinary records. This observed difference is not a causal holiday effect.")
         relation = approximate_price_relationship(data)
         if pd.notna(relation["elasticity"]):
             st.info(f"Approximate log-price/log-demand association: {relation['elasticity']:.2f}; log-scale correlation {relation['correlation']:.2f}. {relation['note']}.")
@@ -348,6 +362,9 @@ def analytics(data: pd.DataFrame) -> None:
         b.metric("Weekly pattern", f"{signals['weekly_strength']:.2f}" if signals["weekly_strength"] is not None else "Unavailable")
         c.metric("Demand volatility", f"{signals['volatility_cv']:.2f}" if signals["volatility_cv"] is not None else "Unavailable")
         d.metric("Unusual days", signals["anomalies"])
+        a, b = st.columns(2)
+        a.metric("Monthly pattern", f"{signals['monthly_strength']:.2f}" if signals["monthly_strength"] is not None else "Insufficient history")
+        b.metric("Annual month-of-year pattern", f"{signals['yearly_strength']:.2f}" if signals["yearly_strength"] is not None else "Insufficient history")
         st.caption("Trend uses a robust 28-day slope. Seasonality and volatility are descriptive. Anomaly flags compare each day with the preceding rolling median and MAD; they do not diagnose the cause.")
         anomalous = observations[observations.anomaly]
         if not anomalous.empty:

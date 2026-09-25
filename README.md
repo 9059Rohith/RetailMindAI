@@ -181,7 +181,7 @@ The app is prepared for **Streamlit Community Cloud** using `app/main.py` on the
 
 1. Open **Overview** and show the historical KPIs and prioritized replenishment list.
 2. In **Data studio**, inspect individual quality checks, generate a seeded dataset, or import a bounded M5 sample. Point out the checksum and explicit cleaning report.
-3. In **Analytics**, inspect revenue by category and region, the promotion comparison, price association and robust demand flags.
+3. In **Analytics**, inspect revenue by category and region, promotion and holiday comparisons, price association, seasonality indicators and robust demand flags.
 4. In **Forecast lab**, select a product, train the candidate models, inspect held-out fold errors and residuals, save a versioned run, and download the future forecast.
 5. In **Settings** and **Inventory**, change service level or risk thresholds, then show how safety stock, reorder point, stockout trajectory and allocation respond.
 6. In **Scenarios** and **Reports**, compare a proposed discount/order against the baseline and export the evidence.

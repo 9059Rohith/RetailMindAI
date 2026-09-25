@@ -17,6 +17,15 @@ def test_all_invalid_dates_reach_quality_review_without_crashing():
     assert any(metric.label == "Health score" and metric.value == "0%" for metric in app.metric)
 
 
+def test_demo_analytics_shows_holiday_and_seasonality_views():
+    app = AppTest.from_file("app/main.py", default_timeout=120).run()
+    next(radio for radio in app.radio if radio.label == "Workspace").set_value("Analytics").run()
+    assert not app.exception
+    assert any(metric.label == "Monthly pattern" for metric in app.metric)
+    assert any(metric.label == "Annual month-of-year pattern" for metric in app.metric)
+    assert not any("Holiday labels are unavailable" in item.value for item in app.info)
+
+
 def test_m5_mode_disables_inventory_without_fabricating_stock():
     sales = b"item_id,cat_id,store_id,state_id,d_1,d_2\nFOOD_1,FOODS,CA_1,CA,2,3\n"
     calendar = b"d,date,wm_yr_wk\nd_1,2011-01-29,11101\nd_2,2011-01-30,11101\n"
@@ -29,6 +38,9 @@ def test_m5_mode_disables_inventory_without_fabricating_stock():
     assert not app.exception
     assert any("M5 benchmark mode" in item.value for item in app.info)
     assert any(metric.label == "Gross margin" and metric.value == "Unavailable" for metric in app.metric)
-    app.radio[0].set_value("Inventory").run()
+    app.radio[0].set_value("Analytics").run()
+    assert not app.exception
+    assert any("Holiday labels are unavailable" in item.value for item in app.info)
+    next(radio for radio in app.radio if radio.label == "Workspace").set_value("Inventory").run()
     assert not app.exception
     assert any("Inventory planning and scenarios need observed stock" in item.value for item in app.warning)
