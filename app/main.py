@@ -431,19 +431,27 @@ def main() -> None:
               "Insights": ("Insights & alerts", "Evidence-backed signals with a clear distinction between observation and recommendation."),
               "Reports": ("Reports", "Export the evidence behind your retail decisions.")}
     heading(*titles[page])
+    if page == "Data studio":
+        st.caption("Quality review covers the full dataset, including records with invalid dates.")
+        with st.empty().container():
+            data_studio(all_data)
+        return
+    if all_data.empty or not all_data.date.notna().any():
+        st.warning("The dataset has no valid dated records. Open Data studio to review, clean, or restore it.")
+        return
     filtered = filters(all_data)
     if filtered.empty and page != "Data studio":
         st.warning("No records match the selected filters. Broaden the date or entity selection.")
         return
     plan = cached_plan(filtered, 0.95)
-    pages = {"Overview": overview, "Data studio": data_studio, "Analytics": analytics, "Forecast lab": forecast_lab,
+    pages = {"Overview": overview, "Analytics": analytics, "Forecast lab": forecast_lab,
              "Inventory": inventory_page, "Scenarios": scenarios, "Insights": insights_page, "Reports": reports}
     page_slot = st.empty()
     with page_slot.container():
         if page in {"Overview", "Inventory", "Scenarios", "Insights", "Reports"}:
             pages[page](filtered, plan)
         else:
-            pages[page](all_data if page == "Data studio" else filtered)
+            pages[page](filtered)
     st.markdown('<p class="footer-note">RetailMind AI · Observations, forecasts and simulations are labeled separately. Inventory recommendations require business review.</p>', unsafe_allow_html=True)
 
 

@@ -165,6 +165,8 @@ python -m compileall -q app retailmind
 
 The workflow template at [`ci/quality-gates.yml`](ci/quality-gates.yml) is ready to copy to `.github/workflows/ci.yml`. The current GitHub credential cannot write workflow files, so hosted CI is **not yet active**. Local checks run as shown above. Tests check deterministic generation, cleaning without source mutation, KPI formulas, lag leakage, rolling backtests, inventory formulas, risk, scenarios and allocation.
 
+The latest verification passed **16 automated tests** and an interactive browser run at desktop and 390px mobile widths. That run exercised CSV rejection, upload, quality review, cleaning and restore, synthetic generation, SQLite save/load, analytics tabs, model training and saved-run reload, inventory allocation, promotion scenarios, and six CSV downloads. The malformed-date route has a dedicated regression test. Docker Compose configuration validates; a container run and live MySQL connection still need a host with a working Docker daemon. The browser screenshots above were captured from the running app.
+
 Six notebooks cover data understanding, EDA, leakage-safe features, forecasting, inventory and model comparison. Regenerate them with `python -m scripts.create_notebooks`; they call the same tested application functions rather than duplicate a second modeling pipeline.
 
 ## Deployment
