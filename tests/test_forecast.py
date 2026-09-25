@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from retailmind.forecast import backtest, make_features, metrics, predict, run_forecast
+from retailmind.forecast import backtest, load_artifact, make_features, metrics, predict, run_forecast, save_artifact
 
 
 def series():
@@ -41,3 +41,22 @@ def test_backtest_and_forecast_are_time_aware():
     assert (result.future.lower <= result.future.forecast).all()
     assert (result.future.forecast <= result.future.upper).all()
     assert (predict(history, 7, "Seasonal naive") >= 0).all()
+
+
+def test_statistical_models_return_nonnegative_future_values():
+    history = series()
+    for name in ("ARIMA", "SARIMA"):
+        forecast = predict(history, 3, name)
+        assert len(forecast) == 3
+        assert np.isfinite(forecast).all()
+        assert (forecast >= 0).all()
+
+
+def test_saved_model_run_has_reproducible_state(tmp_path):
+    result = run_forecast(series(), horizon=7, include_ml=False)
+    path = save_artifact(result, tmp_path / "run.joblib", "demo-v1")
+    loaded = load_artifact(path)
+    assert loaded["dataset_version"] == "demo-v1"
+    assert loaded["winner"] == result.winner
+    assert loaded["model"] is not None
+    pd.testing.assert_frame_equal(loaded["future"], result.future)

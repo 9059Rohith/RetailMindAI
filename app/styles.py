@@ -31,6 +31,12 @@ h1 {font-size:2.25rem!important;font-weight:800!important;} h2 {font-size:1.4rem
 .insight {border-left:3px solid #49d5db;background:#14243a;border-radius:0 10px 10px 0;padding:12px 16px;margin:10px 0;}
 .insight b {color:#f4f7fb;}.insight small {color:#95aac2;}.insight p {margin:4px 0;color:#c2d0df;}
 .footer-note {color:#8097b2;font-size:.78rem;padding-top:1.5rem;}
-@media(max-width:850px){.block-container{padding-left:1rem;padding-right:1rem;}h1{font-size:1.7rem!important;}[data-testid="stMetric"]{min-height:110px;}}
+@media(max-width:1100px){
+  [data-testid="stHorizontalBlock"]{flex-wrap:wrap!important;}
+  [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]{min-width:200px!important;flex:1 1 200px!important;width:auto!important;}
+  [data-testid="stHorizontalBlock"]>[data-testid="stColumn"]:has([data-testid="stPlotlyChart"]){min-width:100%!important;flex-basis:100%!important;}
+  [data-testid="stMetric"]{min-height:110px;}
+}
+@media(max-width:850px){.block-container{padding-left:1rem;padding-right:1rem;}h1{font-size:1.7rem!important;}}
 </style>
 """

@@ -14,7 +14,7 @@
 
 Retail teams rarely struggle with a lack of charts. They struggle to connect a sales change to a credible demand forecast, a stock risk, and a concrete replenishment action. **RetailMind AI connects that chain in one runnable, research-conscious application.** It starts with an included dataset, needs no paid API, and makes its assumptions visible.
 
-> **Status:** Functional Streamlit application and reproducible synthetic-data demo. The bundled data are synthetic; the app does not claim real-world ROI or calibrated predictive coverage.
+> **Status:** Functional Streamlit application and reproducible synthetic-data demo. Public hosting requires the repository owner to sign in to Streamlit Community Cloud. The bundled data are synthetic; the app does not claim real-world ROI or calibrated predictive coverage.
 
 ## The decision chain
 
@@ -84,7 +84,7 @@ Custom CSVs need `date`, `product_id`, `store_id`, `units`, `price`, `stock`. Op
 
 ## Forecasting that respects time
 
-RetailMind compares naive, seasonal naive, moving average, exponential smoothing, random forest and histogram gradient boosting when sufficient history exists. It evaluates with **expanding-window folds**, never a random train/test split. Demand lags and rolling statistics are shifted to exclude the target day. Recursive ML predictions use only already observed or previously predicted values. Future price, promotion and inventory are left out of the standard forecast because they are unknown without a scenario.
+RetailMind compares naive, seasonal naive, moving average, exponential smoothing, random forest and histogram gradient boosting when sufficient history exists. ARIMA and weekly SARIMA can be included from the Forecast lab; they are optional because fitting them across folds takes longer. It evaluates with **expanding-window folds**, never a random train/test split. Demand lags and rolling statistics are shifted to exclude the target day. Recursive ML predictions use only already observed or previously predicted values. Future price, promotion and inventory are left out of the standard forecast because they are unknown without a scenario. The explanation panel shows the selection rule and, for ML winners, training-data permutation importance with its limits.
 
 | Metric | Meaning | Caution |
 | --- | --- | --- |
@@ -100,6 +100,19 @@ Run an actual experiment and inspect the generated CSV:
 ```bash
 python -m scripts.evaluate --product P001 --horizon 14
 ```
+
+For the committed synthetic demo, `python -m scripts.evaluate --product P001 --horizon 7` produced these **mean held-out fold** results on the local verification run (seed 42; three expanding-window folds):
+
+| Model | WAPE | MAE (units/day) | Bias (units/day) |
+| --- | ---: | ---: | ---: |
+| Random forest | 16.74% | 7.35 | +3.88 |
+| Exponential smoothing | 16.95% | 7.58 | +1.18 |
+| Moving average | 17.13% | 7.69 | +3.00 |
+| Gradient boosting | 19.69% | 8.59 | +5.07 |
+| Naive | 20.11% | 9.52 | −6.00 |
+| Seasonal naive | 21.45% | 9.43 | +2.95 |
+
+These are results on generated data for one product and horizon, not a general accuracy claim. The CSV saved in `artifacts/` has the individual fold metrics and can be regenerated with the command above.
 
 The forecast band is **heuristic**, based on observed backtest MAE. It is shown as a sensitivity cue, not a calibrated 90% prediction interval. See [forecasting methodology](docs/forecasting.md).
 
@@ -125,7 +138,7 @@ notebooks/           Six focused research notebooks built from shared modules
 sql/                 Normalized MySQL academic schema
 tests/               Behavior and leakage tests
 docs/                Architecture, methods, formulas, deployment, limits
-.github/workflows/   CI quality gates
+ci/                  GitHub Actions workflow template
 ```
 
 The [architecture document](docs/architecture.md) traces ingestion through decision support. MySQL is optional for the local/academic setup; SQLite is the default fallback. The included demo does not write to a database until the user explicitly saves it. The public Streamlit process is not a confidential-data store.
@@ -141,13 +154,13 @@ python -m scripts.evaluate
 python -m compileall -q app retailmind
 ```
 
-GitHub Actions runs these checks on pushes and pull requests. Tests check deterministic generation, cleaning without source mutation, KPI formulas, lag leakage, rolling backtests, inventory formulas, risk, scenarios and allocation.
+The workflow template at [`ci/quality-gates.yml`](ci/quality-gates.yml) is ready to copy to `.github/workflows/ci.yml`. The current GitHub credential cannot write workflow files, so hosted CI is **not yet active**. Local checks run as shown above. Tests check deterministic generation, cleaning without source mutation, KPI formulas, lag leakage, rolling backtests, inventory formulas, risk, scenarios and allocation.
 
 Six notebooks cover data understanding, EDA, leakage-safe features, forecasting, inventory and model comparison. Regenerate them with `python -m scripts.create_notebooks`; they call the same tested application functions rather than duplicate a second modeling pipeline.
 
 ## Deployment
 
-The app is prepared for **Streamlit Community Cloud** using `app/main.py` on the `main` branch. It uses only the committed demo CSV and open-source packages at startup; no paid service or secret is required. Follow the [deployment guide](docs/deployment.md) for the exact app settings and operational limitations.
+The app is prepared for **Streamlit Community Cloud** using `app/main.py` on the `main` branch. It uses only the committed demo CSV and open-source packages at startup; no paid service or secret is required. The repository owner must connect their GitHub account to Community Cloud and create the app there; a live URL is not claimed until that step succeeds. Follow the [deployment guide](docs/deployment.md) for the exact app settings and operational limitations.
 
 ## Academic contribution and limits
 

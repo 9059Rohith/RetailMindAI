@@ -16,4 +16,4 @@ Streamlit Community Cloud's local filesystem is ephemeral. Do not treat local ar
 
 ## Verification
 
-Run `python -m pytest -q`, `python -m ruff check .`, `python -m scripts.generate_demo`, `python -m scripts.evaluate`, then `streamlit run app/main.py`. GitHub Actions repeats lint, tests, generator, evaluation and syntax compilation on push.
+Run `python -m pytest -q`, `python -m ruff check .`, `python -m scripts.generate_demo`, `python -m scripts.evaluate`, then `streamlit run app/main.py`. The workflow template in `ci/quality-gates.yml` repeats lint, tests, generator, evaluation and syntax compilation once copied to `.github/workflows/ci.yml` by a credential with GitHub's `workflow` permission. Hosted CI is not currently active.

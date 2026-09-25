@@ -21,7 +21,7 @@ from retailmind.analytics import (approximate_price_relationship, daily_trend, d
                                    kpis, product_summary, promotion_effect, weekday_pattern)
 from retailmind.data import assess_quality, clean_data, enrich, generate_retail_data, read_sales_csv
 from retailmind.database import database_engine, load_sales, save_sales
-from retailmind.forecast import daily_series, load_artifact, run_forecast, save_artifact
+from retailmind.forecast import daily_series, explain_model, load_artifact, run_forecast, save_artifact
 from retailmind.insights import build_insights
 from retailmind.inventory import abc_xyz, allocate_limited_stock, plan_replenishment, scenario, stockout_trajectory
 
@@ -236,13 +236,14 @@ def analytics(data: pd.DataFrame) -> None:
 def forecast_lab(data: pd.DataFrame) -> None:
     products = data[["product_id", "product"]].drop_duplicates().sort_values("product")
     names = dict(zip(products.product_id, products["product"]))
-    a, b, c, d = st.columns(4)
-    product_id = a.selectbox("Product", list(names), format_func=lambda key: names[key])
+    a, b, c, d, e = st.columns(5)
+    product_id = a.selectbox("Product", list(names), format_func=lambda key: names[key], key="forecast_product")
     stores = data[data.product_id.eq(product_id)][["store_id", "store"]].drop_duplicates()
     store_names = dict(zip(stores.store_id, stores.store))
-    store = b.selectbox("Store", ["All stores"] + list(store_names), format_func=lambda key: store_names.get(key, key))
+    store = b.selectbox("Store", ["All stores"] + list(store_names), format_func=lambda key: store_names.get(key, key), key="forecast_store")
     horizon = c.slider("Forecast horizon (days)", 7, 30, 14)
     include_ml = d.checkbox("Include ML models", value=True)
+    include_statistical = e.checkbox("Include ARIMA / SARIMA", value=False)
     try:
         series = daily_series(data, product_id, None if store == "All stores" else store)
     except ValueError as exc:
@@ -252,12 +253,12 @@ def forecast_lab(data: pd.DataFrame) -> None:
     if st.button("Train and compare models", type="primary"):
         try:
             with st.spinner("Running expanding-window backtests and generating future demand…"):
-                result = run_forecast(series, horizon, include_ml)
+                result = run_forecast(series, horizon, include_ml, include_statistical)
             st.session_state.forecast_result = result
-            st.session_state.forecast_key = (product_id, store, horizon, len(series), float(series.sum()))
+            st.session_state.forecast_key = (product_id, store, horizon, include_ml, include_statistical, len(series), float(series.sum()))
         except ValueError as exc:
             st.error(str(exc))
-    key = (product_id, store, horizon, len(series), float(series.sum()))
+    key = (product_id, store, horizon, include_ml, include_statistical, len(series), float(series.sum()))
     if st.session_state.get("forecast_key") != key:
         st.info("Run model comparison to see a measured forecast for this selection.")
         return
@@ -280,6 +281,17 @@ def forecast_lab(data: pd.DataFrame) -> None:
     st.caption("The shaded range uses backtest MAE as a heuristic width; it is not a statistically calibrated 90% prediction interval.")
     st.subheader("Model comparison · mean across expanding-window folds")
     st.dataframe(result.comparison.round(2), hide_index=True, width="stretch")
+    with st.expander("Why this model?", expanded=False):
+        st.write(f"{result.winner} had the lowest mean held-out WAPE (MAE breaks ties) across expanding-window folds. This selects a model by measured historical errors, not by a claim that it will always win in future periods.")
+        if result.winner in {"Random forest", "Gradient boosting"}:
+            importance = explain_model(series, result.winner).head(8)
+            st.caption("Permutation importance on recent training observations. It shows predictive association, not causal influence.")
+            chart(px.bar(importance, x="importance", y="feature", orientation="h", title="Top historical features", color_discrete_sequence=[COLORS[0]]), 330)
+        else:
+            explanations = {"Naive": "Repeats the latest observed day.", "Seasonal naive": "Repeats the last seven-day pattern.",
+                            "Moving average": "Uses the mean of the latest 28 days.", "Exponential smoothing": "Weights recent observations more strongly.",
+                            "ARIMA": "Uses autoregressive and moving-average structure.", "SARIMA": "Adds a seven-day seasonal autoregressive term."}
+            st.info(explanations.get(result.winner, "The model extrapolates past demand patterns."))
     download_csv("Download forecast", result.future, "forecast.csv")
     if st.button("Save model run metadata"):
         version = hashlib.sha256(pd.util.hash_pandas_object(data, index=False).values.tobytes()).hexdigest()[:12]
@@ -360,7 +372,9 @@ def scenarios(data: pd.DataFrame, plan: pd.DataFrame) -> None:
     baseline = scenario(**common)
     changed = scenario(**common, discount_pct=discount / 100, promotion=promotion, order_qty=order)
     comparison = pd.DataFrame([{"scenario": "Baseline", **baseline}, {"scenario": "Proposed", **changed}])
-    st.dataframe(comparison.T.reset_index().rename(columns={"index": "Metric"}).astype(str), hide_index=True, width="stretch")
+    comparison_display = comparison.T.reset_index().astype(str)
+    comparison_display.columns = ["Metric", "Baseline", "Proposed"]
+    st.dataframe(comparison_display, hide_index=True, width="stretch")
     a, b, c = st.columns(3)
     a.metric("Demand change", f"{changed['projected_demand']-baseline['projected_demand']:+,.0f} units")
     b.metric("Revenue change", f"₹{changed['revenue']-baseline['revenue']:+,.0f}")

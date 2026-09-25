@@ -9,7 +9,10 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
+from sklearn.inspection import permutation_importance
+from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.holtwinters import SimpleExpSmoothing
+from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 
 @dataclass
@@ -80,19 +83,19 @@ def _predict_baseline(history: pd.Series, horizon: int, name: str) -> np.ndarray
     if name == "Exponential smoothing":
         fit = SimpleExpSmoothing(values, initialization_method="estimated").fit(optimized=True)
         return np.asarray(fit.forecast(horizon)).clip(0)
+    if name == "ARIMA":
+        fit = ARIMA(values, order=(1, 0, 1)).fit()
+        return np.asarray(fit.forecast(horizon)).clip(0)
+    if name == "SARIMA":
+        fit = SARIMAX(values, order=(1, 0, 0), seasonal_order=(1, 0, 0, 7), enforce_stationarity=False, enforce_invertibility=False).fit(disp=False, maxiter=60)
+        return np.asarray(fit.forecast(horizon)).clip(0)
     return np.repeat(values[-1], horizon).clip(0)
 
 
 def _recursive_ml(history: pd.Series, horizon: int, name: str) -> np.ndarray:
     if len(history) < 70:
         raise ValueError("At least 70 daily observations are required for ML models.")
-    features = make_features(history)
-    valid = features.notna().all(axis=1)
-    if name == "Random forest":
-        model = RandomForestRegressor(n_estimators=60, min_samples_leaf=3, random_state=42, n_jobs=-1)
-    else:
-        model = HistGradientBoostingRegressor(max_iter=90, max_leaf_nodes=15, l2_regularization=1.0, random_state=42)
-    model.fit(features.loc[valid, list(FEATURES)], history.loc[valid])
+    model = fit_model(history, name)
     extended = history.copy()
     output = []
     for _ in range(horizon):
@@ -105,19 +108,40 @@ def _recursive_ml(history: pd.Series, horizon: int, name: str) -> np.ndarray:
     return np.asarray(output)
 
 
+def fit_model(history: pd.Series, name: str):
+    """Fit a persistable selected model; baselines retain their recent history as state."""
+    values = history.to_numpy(dtype=float)
+    if name == "ARIMA":
+        return ARIMA(values, order=(1, 0, 1)).fit()
+    if name == "SARIMA":
+        return SARIMAX(values, order=(1, 0, 0), seasonal_order=(1, 0, 0, 7), enforce_stationarity=False, enforce_invertibility=False).fit(disp=False, maxiter=60)
+    if name not in {"Random forest", "Gradient boosting"}:
+        return {"name": name, "recent_units": values[-28:].tolist()}
+    features = make_features(history)
+    valid = features.notna().all(axis=1)
+    if name == "Random forest":
+        model = RandomForestRegressor(n_estimators=60, min_samples_leaf=3, random_state=42, n_jobs=-1)
+    else:
+        model = HistGradientBoostingRegressor(max_iter=90, max_leaf_nodes=15, l2_regularization=1.0, random_state=42)
+    model.fit(features.loc[valid, list(FEATURES)], history.loc[valid])
+    return model
+
+
 def predict(history: pd.Series, horizon: int, name: str) -> np.ndarray:
-    if name in {"Naive", "Seasonal naive", "Moving average", "Exponential smoothing"}:
+    if name in {"Naive", "Seasonal naive", "Moving average", "Exponential smoothing", "ARIMA", "SARIMA"}:
         return _predict_baseline(history, horizon, name)
     if name in {"Random forest", "Gradient boosting"}:
         return _recursive_ml(history, horizon, name)
     raise ValueError(f"Unknown model: {name}")
 
 
-def backtest(series: pd.Series, horizon: int = 14, folds: int = 3, include_ml: bool = True) -> pd.DataFrame:
+def backtest(series: pd.Series, horizon: int = 14, folds: int = 3, include_ml: bool = True, include_statistical: bool = False) -> pd.DataFrame:
     """Expanding-window tests: each prediction sees only earlier observations."""
     if len(series) < max(42, horizon * (folds + 2)):
         raise ValueError("More daily history is needed for rolling-origin backtesting.")
     names = ["Naive", "Seasonal naive", "Moving average", "Exponential smoothing"]
+    if include_statistical and len(series) >= 70:
+        names += ["ARIMA", "SARIMA"]
     if include_ml and len(series) >= 70 + horizon * folds:
         names += ["Random forest", "Gradient boosting"]
     results = []
@@ -128,7 +152,7 @@ def backtest(series: pd.Series, horizon: int = 14, folds: int = 3, include_ml: b
             actual = series.iloc[split:split + horizon].to_numpy()
             try:
                 predicted = predict(train, horizon, name)
-            except (ValueError, RuntimeError, FloatingPointError):
+            except (ValueError, RuntimeError, FloatingPointError, np.linalg.LinAlgError):
                 continue
             seasonal_scale = float(np.abs(train.diff(7).dropna()).mean()) if len(train) > 7 else None
             results.append({"model": name, "fold": folds - fold + 1, "train_end": str(train.index[-1].date()), **metrics(actual, predicted, seasonal_scale)})
@@ -137,8 +161,8 @@ def backtest(series: pd.Series, horizon: int = 14, folds: int = 3, include_ml: b
     return pd.DataFrame(results)
 
 
-def run_forecast(series: pd.Series, horizon: int = 14, include_ml: bool = True) -> ForecastResult:
-    evaluation = backtest(series, min(horizon, 14), include_ml=include_ml)
+def run_forecast(series: pd.Series, horizon: int = 14, include_ml: bool = True, include_statistical: bool = False) -> ForecastResult:
+    evaluation = backtest(series, min(horizon, 14), include_ml=include_ml, include_statistical=include_statistical)
     summary = evaluation.groupby("model", as_index=False).agg({key: "mean" for key in ("MAE", "RMSE", "MAPE", "sMAPE", "WAPE", "MASE", "R2", "Bias", "Underforecast", "Overforecast")})
     summary = summary.sort_values(["WAPE", "MAE"], na_position="last").reset_index(drop=True)
     winner = str(summary.iloc[0]["model"])
@@ -153,12 +177,28 @@ def run_forecast(series: pd.Series, horizon: int = 14, include_ml: bool = True) 
     return ForecastResult(history, future, summary, winner, FEATURES, datetime.now(timezone.utc).isoformat())
 
 
+def explain_model(series: pd.Series, name: str) -> pd.DataFrame:
+    """Training-data permutation importance for ML models; association, not causation."""
+    if name not in {"Random forest", "Gradient boosting"}:
+        return pd.DataFrame(columns=["feature", "importance"])
+    features = make_features(series).dropna()
+    target = series.loc[features.index]
+    model = (RandomForestRegressor(n_estimators=60, min_samples_leaf=3, random_state=42, n_jobs=-1) if name == "Random forest"
+             else HistGradientBoostingRegressor(max_iter=90, max_leaf_nodes=15, l2_regularization=1.0, random_state=42))
+    model.fit(features[list(FEATURES)], target)
+    importance = permutation_importance(model, features[list(FEATURES)].tail(28), target.tail(28), n_repeats=3, random_state=42)
+    return pd.DataFrame({"feature": FEATURES, "importance": importance.importances_mean}).sort_values("importance", ascending=False).reset_index(drop=True)
+
+
 def save_artifact(result: ForecastResult, path: str | Path, dataset_version: str) -> Path:
-    """Persist forecasts and evaluation metadata without serializing uploaded data."""
+    """Persist selected model state, forecasts and evaluation metadata."""
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
+    series = pd.Series(result.history.units.to_numpy(dtype=float), index=pd.to_datetime(result.history.date))
+    fitted = fit_model(series, result.winner)
     joblib.dump({"future": result.future, "comparison": result.comparison, "winner": result.winner,
-                 "features": result.features, "trained_at": result.trained_at, "dataset_version": dataset_version}, target)
+                 "features": result.features, "trained_at": result.trained_at, "dataset_version": dataset_version,
+                 "model": fitted}, target)
     return target
 
 
