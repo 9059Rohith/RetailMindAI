@@ -16,7 +16,7 @@ def test_all_invalid_dates_reach_quality_review_without_crashing():
     app.radio[0].set_value("Data studio").run()
 
     assert not app.exception
-    assert app.title[0].value == "Data studio"
+    assert any("<h1>Data studio</h1>" in item.value for item in app.markdown)
     assert any("invalid dates" in warning.value for warning in app.warning)
     assert any(metric.label == "Health score" and metric.value == "0%" for metric in app.metric)
 

@@ -62,7 +62,7 @@ def test_real_records_round_trip_without_inventing_missing_fields(tmp_path):
 def test_all_real_data_pages_render_without_unsupported_metrics():
     app = AppTest.from_file(ROOT / "app" / "main.py", default_timeout=120).run()
     assert not app.exception
-    assert any(metric.label == "Observed revenue" for metric in app.metric)
+    assert any("Observed revenue" in item.value and "signal-card" in item.value for item in app.markdown)
     navigator = next(radio for radio in app.radio if radio.label == "Workspace")
     for page in ("Data studio", "Analytics", "Forecast lab", "Inventory", "Insights", "Reports"):
         app = navigator.set_value(page).run()

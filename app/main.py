@@ -28,10 +28,10 @@ from retailmind.insights import build_insights
 from retailmind.inventory import (RiskSettings, abc_xyz, allocate_limited_stock,
                                    plan_replenishment, scenario, stockout_trajectory)
 
-st.set_page_config(page_title="RetailMind AI · Retail intelligence", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="RetailMind AI · Retail intelligence", page_icon="◈", layout="wide", initial_sidebar_state="auto")
 st.markdown(CSS, unsafe_allow_html=True)
 
-PLOT = {"paper_bgcolor": "#132239", "plot_bgcolor": "#132239", "font_color": "#c5d3e3", "margin": dict(l=28, r=24, t=44, b=28), "hoverlabel_bgcolor": "#1b324d"}
+PLOT = {"paper_bgcolor": "rgba(0,0,0,0)", "plot_bgcolor": "rgba(0,0,0,0)", "font_color": "#bbcade", "margin": dict(l=26, r=26, t=64, b=40), "hoverlabel_bgcolor": "#152841"}
 COLORS = ["#49d5db", "#a68af9", "#ffbf69", "#ff737d", "#8fbbff", "#60daa8"]
 
 
@@ -53,15 +53,19 @@ def cached_explanations(series: pd.Series, model: str) -> tuple[pd.DataFrame, pd
 
 
 def chart(fig: go.Figure, height: int = 360) -> None:
-    fig.update_layout(**PLOT, height=height, showlegend=True, legend=dict(orientation="h", y=-0.18))
-    fig.update_xaxes(showgrid=False, linecolor="#35506d")
-    fig.update_yaxes(gridcolor="#263b56", zeroline=False)
-    st.plotly_chart(fig, width="stretch", config={"displaylogo": False})
+    fig.update_layout(**PLOT, height=height, showlegend=True,
+                      font=dict(family="DM Sans, sans-serif", size=12, color="#bbcade"),
+                      title=dict(font=dict(family="Manrope, sans-serif", size=17, color="#f1f8ff"), x=.04, y=.95),
+                      legend=dict(orientation="h", y=-.21, x=0, font=dict(size=11)),
+                      hovermode="x unified", hoverlabel=dict(bgcolor="#172b43", font_size=12))
+    fig.update_xaxes(showgrid=False, linecolor="#31455e", tickfont=dict(color="#8fa6be"), title_font=dict(color="#a8bfd5"))
+    fig.update_yaxes(gridcolor="rgba(117,151,186,.12)", linecolor="#31455e", zeroline=False,
+                     tickfont=dict(color="#8fa6be"), title_font=dict(color="#a8bfd5"))
+    st.plotly_chart(fig, width="stretch", config={"displaylogo": False, "modeBarButtonsToRemove": ["lasso2d", "select2d"]})
 
 
 def heading(title: str, subtitle: str) -> None:
-    st.title(title)
-    st.markdown(f'<p class="subtle">{subtitle}</p>', unsafe_allow_html=True)
+    st.markdown(f'<div class="page-heading"><span class="eyebrow">RETAILMIND / WORKSPACE</span><h1>{html.escape(title)}</h1><p>{html.escape(subtitle)}</p></div>', unsafe_allow_html=True)
 
 
 def currency_symbol() -> str:
@@ -129,31 +133,62 @@ def filters(data: pd.DataFrame) -> pd.DataFrame:
     return selected
 
 
+def _sparkline(values: pd.Series) -> str:
+    points = values.tail(28).to_numpy(dtype=float)
+    if not len(points):
+        return ""
+    spread = max(float(points.max() - points.min()), 1.0)
+    coordinates = " ".join(f"{i * 380 / max(len(points) - 1, 1):.1f},{106 - (value - points.min()) / spread * 78:.1f}" for i, value in enumerate(points))
+    return (f'<svg viewBox="0 0 380 120" preserveAspectRatio="none" role="img" aria-label="Observed units over the last 28 days">'
+            f'<defs><linearGradient id="pulse-fill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#59e0d4" stop-opacity=".32"/><stop offset="1" stop-color="#59e0d4" stop-opacity="0"/></linearGradient></defs>'
+            f'<polygon points="0,120 {coordinates} 380,120" fill="url(#pulse-fill)"/><polyline points="{coordinates}" fill="none" stroke="#66e8df" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg>')
+
+
 def overview(data: pd.DataFrame, plan: pd.DataFrame) -> None:
     values = kpis(data)
     currency = currency_symbol()
-    priced = int(data.price.notna().sum())
     total = len(data)
-    st.markdown(f'<div class="hero"><span class="eyebrow">OBSERVED RETAIL INTELLIGENCE</span><h2>Sales evidence, clearer decisions.</h2><p>{data.date.min():%d %b %Y} — {data.date.max():%d %b %Y} · {total:,} real product / store / day records · {data.product_id.nunique():,} products across {data.store_id.nunique():,} stores</p></div>', unsafe_allow_html=True)
+    priced = int(data.price.notna().sum())
+    coverage = priced / total * 100
     daily = daily_trend(data).sort_values("date")
-    recent = daily.units.tail(28).sum()
-    previous = daily.units.iloc[-56:-28].sum() if len(daily) >= 56 else np.nan
+    recent_days = min(28, len(daily))
+    recent = float(daily.units.tail(recent_days).sum())
+    previous = float(daily.units.iloc[-56:-28].sum()) if len(daily) >= 56 else np.nan
     change = (recent / previous - 1) * 100 if previous and np.isfinite(previous) else np.nan
-    metrics = [("Observed revenue", f"{currency}{values['revenue']:,.0f}" if np.isfinite(values["revenue"]) else "Unavailable", f"Prices on {priced:,} / {total:,} rows"),
-               ("Units sold", f"{values['units']:,.0f}", "Across selected observations"),
-               ("28-day demand change", f"{change:+.1f}%" if np.isfinite(change) else "Unavailable", "Versus preceding 28 observed days"),
-               ("Active product / store pairs", f"{data.groupby(['product_id','store_id']).ngroups:,}", "In selected date range")]
-    for column, (label, value, caption) in zip(st.columns(4), metrics):
-        with column:
-            st.metric(label, value)
-            st.caption(caption)
-    left, right = st.columns([1.55, 1])
+    change_label = f"{change:+.1f}%" if np.isfinite(change) else "Unavailable"
+    pairs = data.groupby(["product_id", "store_id"]).ngroups
+    observed_days = (data.date.max() - data.date.min()).days + 1
+    source_label = "HISTORICAL M5" if st.session_state.get("mode", "m5") == "m5" else "UPLOADED RETAIL DATA"
+    outlook_label = "archival outlook" if source_label == "HISTORICAL M5" else "seasonal outlook"
+    st.markdown(
+        f'<section class="command-hero"><div class="command-hero__copy"><div class="hero-status"><span class="status-pulse"></span> OBSERVED RETAIL RECORDS <span class="hero-status__sep">/</span> {source_label}</div>'
+        f'<h1>Every sale is<br><em>a signal.</em></h1><p>Explore what sold, where demand shifted, and how forecasting models perform on observed retail history.</p>'
+        f'<div class="hero-chips"><span>◈ {data.product_id.nunique():,} products</span><span>⌑ {data.store_id.nunique():,} stores</span><span>▤ {total:,} observations</span></div></div>'
+        f'<div class="hero-visual"><div class="hero-visual__top"><span>OBSERVED MOMENTUM</span><span>{data.date.max():%d %b %Y}</span></div>'
+        f'<div class="hero-visual__value">{recent:,.0f}<small>units / latest {recent_days} observed days</small></div><div class="hero-visual__spark">{_sparkline(daily.units)}</div>'
+        f'<div class="hero-visual__foot"><span>28-day change <strong>{change_label}</strong></span><span>{observed_days:,}-day selected window</span></div></div></section>',
+        unsafe_allow_html=True)
+    revenue = f"{currency}{values['revenue']:,.0f}" if np.isfinite(values["revenue"]) else "Unavailable"
+    metrics = [
+        ("01", "Observed revenue", revenue, f"{coverage:.1f}% of rows have a price", "teal", coverage),
+        ("02", "Units sold", f"{values['units']:,.0f}", "Measured across the selected records", "blue", 100),
+        ("03", "Demand movement", change_label, "Latest 28 days vs prior 28 days", "violet", min(abs(change), 100) if np.isfinite(change) else 0),
+        ("04", "Active series", f"{pairs:,}", "Product / store combinations", "amber", 100),
+    ]
+    cards = "".join(f'<div class="signal-card signal-card--{tone}"><div class="signal-card__top"><span>{index} / {html.escape(label)}</span><span class="signal-card__dot"></span></div>'
+                    f'<strong>{html.escape(value)}</strong><small>{html.escape(context)}</small><div class="signal-card__track"><i style="width:{bar:.1f}%"></i></div></div>'
+                    for index, label, value, context, tone, bar in metrics)
+    st.markdown(f'<div class="signal-grid">{cards}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-head"><span>01 / SALES PULSE</span><h2>Observed pattern & {outlook_label}</h2><p>Actual sold units are shown beside a transparent seven-day seasonal baseline.</p></div>', unsafe_allow_html=True)
+    left, right = st.columns([1.5, 1])
     with left:
-        shown = daily.tail(90)
+        shown = daily.tail(90).copy()
+        shown["seven_day_average"] = shown.units.rolling(7, min_periods=1).mean()
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=shown.date, y=shown.units, mode="lines", name="Observed units", line=dict(color=COLORS[0], width=2.5), fill="tozeroy", fillcolor="rgba(73,213,219,.10)"))
-        fig.update_layout(title="Demand over the last 90 observed days", yaxis_title="Units sold", xaxis_title="Observed date")
-        chart(fig, 380)
+        fig.add_trace(go.Scatter(x=shown.date, y=shown.units, mode="lines", name="Observed", line=dict(color="rgba(105,188,208,.45)", width=1.5), hovertemplate="%{x|%d %b %Y}<br>%{y:,.0f} units<extra></extra>"))
+        fig.add_trace(go.Scatter(x=shown.date, y=shown.seven_day_average, mode="lines", name="7-day average", line=dict(color=COLORS[0], width=3), fill="tozeroy", fillcolor="rgba(73,213,219,.07)", hovertemplate="%{x|%d %b %Y}<br>%{y:,.1f} units<extra></extra>"))
+        fig.update_layout(title="Sales velocity · last 90 observed days", yaxis_title="Units sold", xaxis_title="")
+        chart(fig, 370)
     with right:
         if len(daily) >= 7:
             horizon = 14
@@ -161,25 +196,35 @@ def overview(data: pd.DataFrame, plan: pd.DataFrame) -> None:
                                     "units": np.resize(daily.units.tail(7).to_numpy(dtype=float), horizon)})
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=daily.date.tail(28), y=daily.units.tail(28), name="Observed", line=dict(color=COLORS[4], width=2)))
-            fig.add_trace(go.Scatter(x=outlook.date, y=outlook.units, name="Seasonal naive", line=dict(color=COLORS[1], width=2.5, dash="dot")))
-            fig.update_layout(title="14-day archival baseline outlook", yaxis_title="Units / day")
-            chart(fig, 380)
-            st.caption("Repeats the last 7 observed days. Forecast starts after the historical M5 endpoint; it is not a live 2026 forecast. Use Forecast lab for measured model comparison.")
-    left, right = st.columns([1.45, 1])
+            fig.add_trace(go.Scatter(x=outlook.date, y=outlook.units, name="Seasonal baseline", line=dict(color=COLORS[1], width=3, dash="dot")))
+            fig.update_layout(title=f"{horizon}-day seasonal baseline", yaxis_title="Units / day", xaxis_title="")
+            chart(fig, 370)
+            st.caption("The baseline repeats the last seven observed days. Compare measured models and held-out errors in Forecast lab.")
+    st.markdown('<div class="section-head"><span>02 / MIX & SIGNALS</span><h2>Where the volume came from</h2><p>Category mix and evidence based observations update with your filters.</p></div>', unsafe_allow_html=True)
+    left, right = st.columns([1.15, 1])
     with left:
-        st.subheader("Category contribution")
-        category = dimension_summary(data, "category")
+        category = dimension_summary(data, "category").sort_values("units")
         if category.empty:
             st.info("Category labels are unavailable.")
         else:
-            chart(px.bar(category, x="category", y="units", color="category", title="Observed units by category",
-                         labels={"category": "Category", "units": "Units sold"}, color_discrete_sequence=COLORS), 300)
+            fig = go.Figure(go.Bar(x=category.units, y=category.category, orientation="h", marker_color=[COLORS[4], COLORS[1], COLORS[0]] * (len(category) // 3 + 1),
+                                   text=category.units.map(lambda number: f"{number:,.0f}"), textposition="outside"))
+            fig.update_layout(title="Unit sales by category", xaxis_title="Observed units", yaxis_title="", showlegend=False)
+            chart(fig, 315)
     with right:
-        st.subheader("Decision brief")
-        for item in build_insights(data, plan, current_risk_settings())[:3]:
-            st.markdown(f'<div class="insight"><small>{html.escape(item["basis"])}</small><br><b>{html.escape(item["title"])}</b><p>{html.escape(item["detail"])}</p></div>', unsafe_allow_html=True)
+        evidence = []
+        if not category.empty:
+            top = category.iloc[-1]
+            share = f"{top.units / values['units'] * 100:.1f}% of selected sales" if values["units"] else "Share unavailable when selected sales are zero"
+            evidence.append(("CATEGORY LEADER", str(top.category), f"{top.units:,.0f} units · {share}"))
+        peak = daily.tail(90).sort_values("units", ascending=False).iloc[0]
+        evidence.append(("PEAK OBSERVED DAY", f"{peak.date:%d %b %Y}", f"{peak.units:,.0f} units sold across the selected records"))
+        for item in build_insights(data, plan, current_risk_settings())[:1]:
+            evidence.append((item["basis"].upper(), item["title"], item["detail"]))
         if plan.empty:
-            st.info("Inventory risk and order recommendations need observed stock, unit cost and lead time. M5 does not contain them.")
+            evidence.append(("DATA LIMITATION", "Inventory unavailable", "M5 has no observed stock, cost or lead time. No reorder quantity is produced."))
+        content = "".join(f'<div class="evidence-row"><span>{html.escape(label)}</span><strong>{html.escape(title)}</strong><p>{html.escape(detail)}</p></div>' for label, title, detail in evidence)
+        st.markdown(f'<div class="evidence-panel"><div class="evidence-panel__head">EVIDENCE DESK <span>{len(evidence):02d} SIGNALS</span></div>{content}</div>', unsafe_allow_html=True)
 
 
 def data_studio(data: pd.DataFrame) -> None:
@@ -626,7 +671,10 @@ def main() -> None:
         start_label = f"{all_data.date.min():%d %b %Y}" if all_data.date.notna().any() else "Dates unavailable"
         end_label = f"{all_data.date.max():%d %b %Y}" if all_data.date.notna().any() else "Dates unavailable"
         st.markdown(f'<div class="sidebar-source"><span>DATA SOURCE</span><strong>{html.escape(st.session_state.get("source", "M5 observed sample"))}</strong><small>{start_label} — {end_label}</small><small>{len(all_data):,} observed rows</small></div>', unsafe_allow_html=True)
-        st.caption("Historical research data · latest observation 2016")
+        if st.session_state.get("mode", "m5") == "m5":
+            st.caption(f"Historical research data · latest observation {all_data.date.max():%Y}")
+        else:
+            st.caption("Uploaded observed retail data")
     titles = {"Overview": ("Retail intelligence", "An evidence-led view of observed sales and demand."),
               "Data studio": ("Data studio", "Trace each input and inspect data quality."),
               "Analytics": ("Sales analytics", "Explore observed demand by time, product, store and region."),
@@ -636,7 +684,8 @@ def main() -> None:
               "Insights": ("Insights & alerts", "Signals derived from observed sales and demand."),
               "Reports": ("Reports", "Export the observed data and model evidence."),
               "Settings": ("Settings", "Make inventory classification and service assumptions explicit.")}
-    heading(*titles[page])
+    if page != "Overview":
+        heading(*titles[page])
     if page == "Data studio":
         st.caption("Quality review covers the full dataset, including records with invalid dates.")
         with st.empty().container():
@@ -648,7 +697,11 @@ def main() -> None:
     if all_data.empty or not all_data.date.notna().any():
         st.warning("The dataset has no valid dated records. Open Data studio to review, clean, or restore it.")
         return
-    filtered = filters(all_data)
+    if page == "Overview":
+        with st.expander("Explore date, store, product and category filters", expanded=False):
+            filtered = filters(all_data)
+    else:
+        filtered = filters(all_data)
     if filtered.empty and page != "Data studio":
         st.warning("No records match the selected filters. Broaden the date or entity selection.")
         return
