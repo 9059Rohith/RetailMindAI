@@ -42,4 +42,4 @@ The script writes `summary.json` and `sample_models.csv`. Verified results from 
 
 ## Interpretation
 
-The complete series benchmark establishes whether simple forecasting rules generalize beyond the synthetic demo. The nine-series experiment tests whether historical backtest selection improves the subsequent 28-day holdout for varied product categories and states. Any difference should be read as evidence for this dataset and split, not a causal or commercial ROI claim.
+The complete series benchmark checks whether simple forecasting rules generalize across the real M5 series. The nine-series experiment tests whether historical backtest selection improves the subsequent 28-day holdout for varied product categories and states. Any difference should be read as evidence for this dataset and split, not a causal or commercial ROI claim.

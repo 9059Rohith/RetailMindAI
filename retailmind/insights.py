@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from .analytics import demand_signals, kpis
+from .analytics import demand_signals
 from .inventory import RiskSettings
 
 
@@ -11,11 +11,13 @@ def build_insights(data: pd.DataFrame, plan: pd.DataFrame,
                    risk_settings: RiskSettings | None = None) -> list[dict[str, str]]:
     policy = risk_settings or RiskSettings()
     results = []
-    indicators = kpis(data)
-    if indicators["growth"] > 5:
-        results.append({"level": "Opportunity", "title": "Revenue is growing", "detail": f"Latest monthly revenue is {indicators['growth']:.1f}% above the preceding month in the selected data.", "basis": "Observed sales"})
-    elif indicators["growth"] < -5:
-        results.append({"level": "Warning", "title": "Revenue has softened", "detail": f"Latest monthly revenue is {abs(indicators['growth']):.1f}% below the preceding month.", "basis": "Observed sales"})
+    daily = data.groupby("date")["units"].sum().sort_index()
+    if len(daily) >= 56 and daily.iloc[-56:-28].sum() > 0:
+        change = (daily.iloc[-28:].sum() / daily.iloc[-56:-28].sum() - 1) * 100
+        if abs(change) >= 5:
+            results.append({"level": "Opportunity" if change > 0 else "Warning", "title": "Observed demand rose" if change > 0 else "Observed demand softened",
+                            "detail": f"The latest 28 observed days sold {abs(change):.1f}% {'more' if change > 0 else 'fewer'} units than the preceding 28 days in the selected data.",
+                            "basis": "Observed unit sales · equal 28-day windows"})
     signals, observations = demand_signals(data)
     recent_anomalies = observations.tail(14).loc[lambda frame: frame.anomaly] if "anomaly" in observations else observations
     if not recent_anomalies.empty:

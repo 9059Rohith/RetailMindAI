@@ -1,0 +1,11 @@
+USE retailmind;
+CREATE INDEX idx_sales_product_date ON sales (product_id, sale_date);
+CREATE INDEX idx_sales_store_date ON sales (store_id, sale_date);
+CREATE INDEX idx_sales_date ON sales (sale_date);
+CREATE INDEX idx_inventory_product_store_date ON inventory (product_id, store_id, snapshot_date);
+CREATE INDEX idx_prices_store_date ON prices (store_id, effective_date);
+CREATE INDEX idx_promotions_dates ON promotions (start_date, end_date);
+CREATE INDEX idx_forecasts_product_date ON forecasts (product_id, forecast_date);
+CREATE INDEX idx_recommendations_risk ON inventory_recommendations (risk_level, snapshot_date);
+CREATE INDEX idx_alerts_created_severity ON alerts (created_at, severity);
+CREATE INDEX idx_quality_dataset ON data_quality_runs (dataset_checksum, created_at);

@@ -2,22 +2,34 @@
 
 ## Streamlit Community Cloud
 
-1. Push this repository to GitHub.
-2. In Streamlit Community Cloud, create an app from `9059Rohith/RetailMindAI`, branch `main`, main file `app/main.py`.
-3. Use Python 3.12 if the deployment UI offers a runtime choice. `requirements.txt` is discovered at the repository root.
-4. No secret or database is required for the included demo. The app starts directly from `data/demo_sales.csv`.
-5. Wait for the app's health indicator and open the public `streamlit.app` URL.
+The application starts from the committed real M5 subset and needs no secret or database. Deploy the [GitHub repository](https://github.com/9059Rohith/RetailMindAI) with:
 
-Streamlit Community Cloud's local filesystem is ephemeral. Do not treat local artifacts or SQLite as durable shared storage. The public demo has no login or per-user database isolation; do not upload sensitive retail data.
+| Setting | Value |
+| --- | --- |
+| Repository | `9059Rohith/RetailMindAI` |
+| Branch | `main` |
+| Main file path | `app/main.py` |
+| Dependencies | Root `requirements.txt` |
+| Python | 3.12, when selectable |
 
-The M5 importer accepts the three official CSVs through the browser. The configured upload cap is 300 MB per file. Large benchmark imports can exceed a free host's memory or request limits; use the local Docker or Python setup for full official files, and keep the sample size bounded in the M5 tab.
+If Community Cloud says **“the app’s code is not connected to a remote GitHub repository”**, check that you are in the workspace for `9059Rohith` and that the repository owner has [connected and authorized GitHub](https://docs.streamlit.io/deploy/streamlit-community-cloud/get-started/connect-your-github-account). Streamlit requires admin permission on the repository. A local `git remote` or successful `git push` alone does not authorize the Community Cloud account. Then create the app with the settings above and verify its public URL and logs. No public URL is claimed before that succeeds.
+
+The **Deploy** button inside the local Docker app also cannot discover the host's Git remote: Docker intentionally excludes `.git` from the image. Start deployment from [Community Cloud](https://share.streamlit.io/) using the pushed GitHub repository, rather than from that local button.
+
+The Cloud filesystem is ephemeral. SQLite and model registry files are suitable for a local project demonstration, not durable multiuser storage. Public uploads should not contain confidential data.
 
 ## Local Docker
 
-`docker compose up --build` starts the app at `http://localhost:8501` and a MySQL 8.4 container with a local development password. Set `APP_PORT=8502` before running Compose if port 8501 is occupied. The app checks the MySQL connection and falls back to SQLite if unavailable. The database service is initialized from `sql/schema.sql`, `sql/indexes.sql` and `sql/seed.sql`; example reports are in `sql/analytical_queries.sql`. Change the example passwords before any network-exposed deployment.
-
-The normalized save/load path was exercised against MySQL 8.0.46 in WSL and MySQL 8.4.11 through Docker Desktop. The Desktop run built both services, initialized the SQL schema and indexes, reached healthy status for both containers, and returned HTTP 200 from the app. Inside the app container, all nine workspace pages rendered without exceptions. The app connected to MySQL, saved and loaded 14 generated records, then replaced them with 7 records without leaving stale fact rows. The bundled analytical queries executed successfully.
+Run `docker compose up --build` to start Streamlit and MySQL 8.4. The default app port is 8501; set `APP_PORT=8502` if occupied. Docker uses local development credentials in `docker-compose.yml`; change them before exposing MySQL. Startup works without MySQL by falling back to SQLite.
 
 ## Verification
 
-Run `python -m pytest -q`, `python -m ruff check .`, `python -m scripts.generate_demo`, `python -m scripts.evaluate`, then `streamlit run app/main.py`. The workflow template in `ci/quality-gates.yml` repeats lint, tests, generator, evaluation and syntax compilation once copied to `.github/workflows/ci.yml` by a credential with GitHub's `workflow` permission. Hosted CI is not currently active.
+```bash
+python -m pip install -r requirements-dev.txt
+python -m ruff check .
+python -m pytest -q
+python -m scripts.evaluate --horizon 7
+python -m compileall -q app retailmind scripts
+```
+
+The `ci/quality-gates.yml` file is a GitHub Actions template. Hosted CI needs it installed at `.github/workflows/ci.yml` by a credential with `workflow` scope. Local checks remain runnable independently.

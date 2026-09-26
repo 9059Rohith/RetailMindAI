@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from retailmind.data import generate_retail_data
+from tests.synthetic_fixtures import generate_retail_data
 from retailmind.database import database_engine, load_sales, save_sales
 
 

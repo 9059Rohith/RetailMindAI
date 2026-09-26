@@ -1,0 +1,19 @@
+{
+  "source": "M5 Forecasting Accuracy, sales_train_evaluation, calendar, sell_prices",
+  "source_url": "https://www.kaggle.com/competitions/m5-forecasting-accuracy/data",
+  "method": "Five series per observed store/category group ranked by SHA-256(store|category|item); last 731 observed sales days; left join observed weekly prices and calendar events; no imputation",
+  "raw_sha256": {
+    "sales_train_evaluation.csv": "4b4a47c44c38380d2a9168216fea8c9ff2f31b1ddb772f8a0995952a038b8aa0",
+    "calendar.csv": "d12b5914ef03e66649adf5dd9e996e6602251c22b7a6af8f1f7e3aa12f8860f5",
+    "sell_prices.csv": "9da3ad1f8b8ccacdbdc70612191dd375ec24a4ac6625c24b75b3bc60b0bed2ef"
+  },
+  "sample_sha256": "02c82156b57537f50911d3bca5f30d34c90f3eea9ed74934e5d7c273625fb5b2",
+  "rows": 109650,
+  "series": 150,
+  "days": 731,
+  "date_start": "2014-05-23",
+  "date_end": "2016-05-22",
+  "missing_prices": 863,
+  "missing_stock": "not present in M5",
+  "missing_unit_cost": "not present in M5"
+}

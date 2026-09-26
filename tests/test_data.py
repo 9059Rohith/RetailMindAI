@@ -3,8 +3,8 @@ from io import BytesIO
 import pandas as pd
 import pytest
 
-from retailmind.data import (SyntheticConfig, assess_quality, clean_data, dataset_metadata, generate_retail_data,
-                             read_m5_sample, read_sales_csv)
+from retailmind.data import assess_quality, clean_data, dataset_metadata, read_m5_sample, read_sales_csv
+from tests.synthetic_fixtures import SyntheticConfig, generate_retail_data
 
 
 def test_generator_is_deterministic_and_retail_complete():
@@ -43,7 +43,8 @@ def test_quality_and_cleaning_keep_original():
                for check in report.checks)
     cleaned, log = clean_data(bad)
     assert len(cleaned) < len(bad)
-    assert (cleaned.stock >= 0).all()
+    assert (cleaned.stock.dropna() >= 0).all()
+    assert cleaned.stock.isna().sum() == 1
     assert (cleaned.units >= 0).all()
     assert len(log) > 0
     assert bad.loc[1, "stock"] == -4

@@ -20,8 +20,7 @@ from app.styles import CSS
 from retailmind.analytics import (approximate_price_relationship, daily_trend, demand_signals,
                                    dimension_summary, holiday_effect, kpis, product_summary,
                                    promotion_effect, weekday_pattern)
-from retailmind.data import (SyntheticConfig, assess_quality, clean_data, dataset_metadata, enrich,
-                             generate_retail_data, read_m5_sample, read_sales_csv)
+from retailmind.data import assess_quality, clean_data, dataset_metadata, enrich, read_m5_sample, read_sales_csv
 from retailmind.database import database_engine, load_sales, save_sales
 from retailmind.forecast import (daily_series, explain_model, explain_next_day, list_artifacts, load_artifact,
                                  register_artifact, run_forecast)
@@ -37,16 +36,9 @@ COLORS = ["#49d5db", "#a68af9", "#ffbf69", "#ff737d", "#8fbbff", "#60daa8"]
 
 
 @st.cache_data(show_spinner=False)
-def demo_data() -> pd.DataFrame:
-    path = Path(__file__).resolve().parents[1] / "data" / "demo_sales.csv"
-    if path.exists():
-        return enrich(pd.read_csv(path))
-    return generate_retail_data(products=12, stores=4, days=120)
-
-
-@st.cache_data(show_spinner=False)
-def synthetic_data(products: int, stores: int, days: int, seed: int, config: SyntheticConfig) -> pd.DataFrame:
-    return generate_retail_data(products, stores, days, seed, config)
+def observed_data() -> pd.DataFrame:
+    path = Path(__file__).resolve().parents[1] / "data" / "m5_observed.csv.gz"
+    return enrich(pd.read_csv(path, compression="gzip", low_memory=False))
 
 
 @st.cache_data(show_spinner=False)
@@ -73,7 +65,7 @@ def heading(title: str, subtitle: str) -> None:
 
 
 def currency_symbol() -> str:
-    return "$" if st.session_state.get("mode") == "m5" else "₹"
+    return "$" if st.session_state.get("mode", "m5") == "m5" else st.session_state.get("currency", "")
 
 
 def download_csv(label: str, frame: pd.DataFrame, filename: str) -> None:
@@ -81,7 +73,7 @@ def download_csv(label: str, frame: pd.DataFrame, filename: str) -> None:
 
 
 def base_data() -> pd.DataFrame:
-    return st.session_state.get("dataset", demo_data())
+    return st.session_state.get("dataset", observed_data())
 
 
 def current_risk_settings() -> RiskSettings:
@@ -102,7 +94,8 @@ def activate_dataset(data: pd.DataFrame, source: str, mode: str) -> None:
 
 def filters(data: pd.DataFrame) -> pd.DataFrame:
     st.markdown("<div class='eyebrow'>Global filters</div>", unsafe_allow_html=True)
-    cols = st.columns([1.7, 1, 1, 1, 1, 1])
+    has_promotion = data.promotion.notna().any()
+    cols = st.columns([1.7, 1, 1, 1, 1] + ([1] if has_promotion else []))
     minimum, maximum = pd.to_datetime(data.date).min().date(), pd.to_datetime(data.date).max().date()
     with cols[0]:
         dates = st.date_input("Date range", (minimum, maximum), min_value=minimum, max_value=maximum)
@@ -116,8 +109,10 @@ def filters(data: pd.DataFrame) -> pd.DataFrame:
     categories = data if category == "All categories" else data[data.category.eq(category)]
     with cols[4]:
         product = st.selectbox("Product", ["All products"] + sorted(categories["product"].dropna().astype(str).unique().tolist()))
-    with cols[5]:
-        promotion = st.selectbox("Promotion", ["All sales", "Promoted", "Non-promoted"])
+    promotion = "All sales"
+    if has_promotion:
+        with cols[5]:
+            promotion = st.selectbox("Promotion", ["All sales", "Promoted", "Non-promoted"])
     selected = data.copy()
     if len(dates) == 2:
         selected = selected[selected.date.between(pd.Timestamp(dates[0]), pd.Timestamp(dates[1]))]
@@ -137,38 +132,61 @@ def filters(data: pd.DataFrame) -> pd.DataFrame:
 def overview(data: pd.DataFrame, plan: pd.DataFrame) -> None:
     values = kpis(data)
     currency = currency_symbol()
-    at_risk = int(plan.risk.isin(["High", "Critical"]).sum()) if not plan.empty else 0
-    margin = f"{values['margin']:.1f}%" if np.isfinite(values["margin"]) else "Unavailable"
-    for column, (label, value) in zip(st.columns(4), [("Revenue", f"{currency}{values['revenue']:,.0f}"), ("Units sold", f"{values['units']:,.0f}"), ("At-risk product-store pairs", f"{at_risk:,}"), ("Gross margin", margin)]):
-        column.metric(label, value)
+    priced = int(data.price.notna().sum())
+    total = len(data)
+    st.markdown(f'<div class="hero"><span class="eyebrow">OBSERVED RETAIL INTELLIGENCE</span><h2>Sales evidence, clearer decisions.</h2><p>{data.date.min():%d %b %Y} — {data.date.max():%d %b %Y} · {total:,} real product / store / day records · {data.product_id.nunique():,} products across {data.store_id.nunique():,} stores</p></div>', unsafe_allow_html=True)
+    daily = daily_trend(data).sort_values("date")
+    recent = daily.units.tail(28).sum()
+    previous = daily.units.iloc[-56:-28].sum() if len(daily) >= 56 else np.nan
+    change = (recent / previous - 1) * 100 if previous and np.isfinite(previous) else np.nan
+    metrics = [("Observed revenue", f"{currency}{values['revenue']:,.0f}" if np.isfinite(values["revenue"]) else "Unavailable", f"Prices on {priced:,} / {total:,} rows"),
+               ("Units sold", f"{values['units']:,.0f}", "Across selected observations"),
+               ("28-day demand change", f"{change:+.1f}%" if np.isfinite(change) else "Unavailable", "Versus preceding 28 observed days"),
+               ("Active product / store pairs", f"{data.groupby(['product_id','store_id']).ngroups:,}", "In selected date range")]
+    for column, (label, value, caption) in zip(st.columns(4), metrics):
+        with column:
+            st.metric(label, value)
+            st.caption(caption)
     left, right = st.columns([1.55, 1])
     with left:
-        trend = daily_trend(data).tail(30)
-        fig = px.bar(trend, x="date", y="revenue", title="Revenue trend · last 30 days", color_discrete_sequence=[COLORS[0]], labels={"revenue": f"Revenue ({currency})", "date": "Date"})
-        chart(fig)
+        shown = daily.tail(90)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=shown.date, y=shown.units, mode="lines", name="Observed units", line=dict(color=COLORS[0], width=2.5), fill="tozeroy", fillcolor="rgba(73,213,219,.10)"))
+        fig.update_layout(title="Demand over the last 90 observed days", yaxis_title="Units sold", xaxis_title="Observed date")
+        chart(fig, 380)
     with right:
-        if plan.empty:
-            st.info("Inventory risk is unavailable without observed stock.")
+        if len(daily) >= 7:
+            horizon = 14
+            outlook = pd.DataFrame({"date": pd.date_range(start=daily.date.iloc[-1], periods=horizon + 1, freq="D")[1:],
+                                    "units": np.resize(daily.units.tail(7).to_numpy(dtype=float), horizon)})
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=daily.date.tail(28), y=daily.units.tail(28), name="Observed", line=dict(color=COLORS[4], width=2)))
+            fig.add_trace(go.Scatter(x=outlook.date, y=outlook.units, name="Seasonal naive", line=dict(color=COLORS[1], width=2.5, dash="dot")))
+            fig.update_layout(title="14-day archival baseline outlook", yaxis_title="Units / day")
+            chart(fig, 380)
+            st.caption("Repeats the last 7 observed days. Forecast starts after the historical M5 endpoint; it is not a live 2026 forecast. Use Forecast lab for measured model comparison.")
+    left, right = st.columns([1.45, 1])
+    with left:
+        st.subheader("Category contribution")
+        category = dimension_summary(data, "category")
+        if category.empty:
+            st.info("Category labels are unavailable.")
         else:
-            risk = plan.risk.value_counts().reindex(["Critical", "High", "Medium", "Low"], fill_value=0).reset_index()
-            risk.columns = ["Risk", "Pairs"]
-            fig = px.pie(risk, names="Risk", values="Pairs", hole=0.61, title="Inventory risk composition", color="Risk", color_discrete_map={"Critical": "#ff737d", "High": "#ffbf69", "Medium": "#a68af9", "Low": "#49d5db"})
-            fig.update_traces(textinfo="none", marker_line_width=0)
-            chart(fig)
-    st.subheader("Top replenishment actions")
-    if plan.empty:
-        st.info("No inventory records match the selected filters.")
-    else:
-        display = plan[["product", "store", "stock", "days_cover", "recommended_order", "risk", "reason"]].head(10).copy()
-        display.days_cover = display.days_cover.round(1)
-        display.columns = ["Product", "Store", "Current stock", "Days of cover", "Recommended order", "Priority", "Reason"]
-        st.dataframe(display, hide_index=True, width="stretch")
+            chart(px.bar(category, x="category", y="units", color="category", title="Observed units by category",
+                         labels={"category": "Category", "units": "Units sold"}, color_discrete_sequence=COLORS), 300)
+    with right:
+        st.subheader("Decision brief")
+        for item in build_insights(data, plan, current_risk_settings())[:3]:
+            st.markdown(f'<div class="insight"><small>{html.escape(item["basis"])}</small><br><b>{html.escape(item["title"])}</b><p>{html.escape(item["detail"])}</p></div>', unsafe_allow_html=True)
+        if plan.empty:
+            st.info("Inventory risk and order recommendations need observed stock, unit cost and lead time. M5 does not contain them.")
 
 
 def data_studio(data: pd.DataFrame) -> None:
-    upload, synth, benchmark, database = st.tabs(["Upload & quality", "Synthetic data", "M5 benchmark", "Database"])
+    upload, benchmark, database = st.tabs(["Quality & lineage", "Import official M5", "Database"])
     with upload:
-        file = st.file_uploader("Upload a sales CSV", type="csv", help="Required: date, product_id, store_id, units, price, stock. Optional descriptive fields are filled explicitly.")
+        st.caption("The bundled source contains observed M5 product/store/day sales, weekly prices, and calendar events. Missing prices remain missing.")
+        file = st.file_uploader("Upload an observed sales CSV", type="csv", help="Required: date, product_id, store_id, units. Optional price, stock, cost and descriptive fields remain missing when absent.")
         if file and st.button("Load uploaded dataset", type="primary"):
             try:
                 activate_dataset(read_sales_csv(file.getvalue()), file.name, "retail")
@@ -177,7 +195,7 @@ def data_studio(data: pd.DataFrame) -> None:
                 st.error(str(exc))
         report = assess_quality(data)
         cols = st.columns(6)
-        for col, (label, value) in zip(cols, [("Health score", f"{report.score}%"), ("Rows", f"{report.rows:,}"), ("Missing", f"{report.missing_pct:.2f}%"), ("Duplicates", report.duplicates), ("Invalid dates", report.invalid_dates), ("Outliers", report.outliers)]):
+        for col, (label, value) in zip(cols, [("Health score", f"{report.score}%"), ("Rows", f"{report.rows:,}"), ("Missing required", f"{report.missing_pct:.2f}%"), ("Duplicates", report.duplicates), ("Invalid dates", report.invalid_dates), ("Outliers", report.outliers)]):
             col.metric(label, value)
         if report.issues:
             for issue in report.issues:
@@ -186,69 +204,33 @@ def data_studio(data: pd.DataFrame) -> None:
             st.success("No quality issues detected by the current rules.")
         st.subheader("Data health checks")
         st.dataframe(pd.DataFrame([check.__dict__ for check in report.checks]), hide_index=True, width="stretch")
-        cap = st.checkbox("Cap extreme unit outliers at the 99th percentile", value=False)
-        if st.button("Auto clean dataset"):
-            cleaned, log = clean_data(data, cap)
+        availability = pd.DataFrame({"field": ["price", "stock", "unit_cost", "lead_time", "promotion", "holiday"],
+                                     "observed_rows": [int(data[col].notna().sum()) if col in data else 0 for col in ("price", "stock", "unit_cost", "lead_time", "promotion", "holiday")]})
+        st.subheader("Field availability")
+        st.dataframe(availability, hide_index=True, width="stretch")
+        if st.button("Quarantine invalid rows"):
+            cleaned, log = clean_data(data)
             st.session_state.original = data.copy()
-            activate_dataset(cleaned, st.session_state.get("source", "included demo") + " · cleaned", st.session_state.get("mode", "retail"))
+            activate_dataset(cleaned, st.session_state.get("source", "M5 observed sample") + " · cleaned", st.session_state.get("mode", "m5"))
             st.session_state.cleaning_log = log
             st.rerun()
         if "cleaning_log" in st.session_state:
             st.subheader("Cleaning report")
             st.dataframe(st.session_state.cleaning_log, hide_index=True, width="stretch")
             if st.button("Restore original dataset"):
-                activate_dataset(st.session_state.original, st.session_state.get("source", "included demo").replace(" · cleaned", ""), st.session_state.get("mode", "retail"))
+                activate_dataset(st.session_state.original, st.session_state.get("source", "M5 observed sample").replace(" · cleaned", ""), st.session_state.get("mode", "m5"))
                 st.session_state.pop("cleaning_log", None)
                 st.rerun()
         st.dataframe(data.head(20), width="stretch", hide_index=True)
-        st.json(dataset_metadata(data, st.session_state.get("source", "included demo"),
-                                 st.session_state.get("dataset_created_at")))
+        st.json(dataset_metadata(data, st.session_state.get("source", "M5 observed sample"),
+                                  st.session_state.get("dataset_created_at")))
         download_csv("Download current dataset", data, "retailmind_sales.csv")
-    with synth:
-        st.write("Generate a seeded dataset with seasonality, promotions, holidays, suppliers, stockouts, returns and profit.")
-        a, b, c, d = st.columns(4)
-        products = a.number_input("Products", 50, 100, 54)
-        stores = b.number_input("Stores", 10, 20, 12)
-        regions = c.number_input("Regions", 1, 4, 4)
-        categories = d.number_input("Categories", 1, 6, 6)
-        a, b, c = st.columns(3)
-        start = a.date_input("Start date", value=pd.Timestamp("2025-07-05"))
-        end = b.date_input("End date", value=pd.Timestamp("2025-12-31"))
-        seed = c.number_input("Random seed", 1, 99999, 42)
-        with st.expander("Demand and supply controls"):
-            a, b, c = st.columns(3)
-            seasonality = a.slider("Monthly seasonality strength", 0.0, 0.5, 0.18, 0.01)
-            yearly = b.slider("Yearly seasonality strength", 0.0, 0.5, 0.0, 0.01)
-            promotion_frequency = c.slider("Promotion frequency", 0.0, 0.5, 0.09, 0.01)
-            a, b, c = st.columns(3)
-            price_variation = a.slider("Daily price variation", 0.0, 0.3, 0.0, 0.01)
-            stockout_probability = b.slider("Supply disruption probability", 0.0, 0.5, 0.0, 0.01)
-            volatility = c.slider("Demand shock multiplier", 1.0, 2.5, 1.0, 0.1)
-            a, b, c = st.columns(3)
-            lead_low = a.number_input("Minimum supplier lead days", 1, 30, 3)
-            lead_high = b.number_input("Maximum supplier lead days", 1, 45, 14)
-            slow_share = c.slider("Slow-mover share", 0.0, 0.5, 0.0, 0.05)
-        if st.button("Generate dataset", type="primary"):
-            days = (end - start).days + 1
-            if not 35 <= days <= 365 or lead_low > lead_high:
-                st.error("Choose 35–365 days and a maximum lead time at least as large as the minimum.")
-            else:
-                config = SyntheticConfig(regions=int(regions), categories=int(categories), end_date=str(end),
-                                         seasonality_strength=seasonality, yearly_strength=yearly,
-                                         promotion_frequency=promotion_frequency, price_variation=price_variation,
-                                         stockout_probability=stockout_probability, demand_volatility=volatility,
-                                         lead_time_low=int(lead_low), lead_time_high=int(lead_high),
-                                         slow_mover_share=slow_share)
-                with st.spinner("Generating retail records…"):
-                    activate_dataset(synthetic_data(int(products), int(stores), int(days), int(seed), config),
-                                     f"synthetic-{seed}", "retail")
-                st.rerun()
-        if st.button("Restore included demo"):
-            activate_dataset(demo_data(), "included demo", "retail")
+        if st.button("Restore bundled M5 observations"):
+            activate_dataset(observed_data(), "M5 observed sample", "m5")
             st.rerun()
     with benchmark:
-        st.write("Import an M5 sample from the official wide sales, calendar and sell-prices CSVs. The importer reads a bounded number of series and recent days; it does not redistribute M5 data.")
-        m5_sales = st.file_uploader("M5 sales_train_validation.csv", type="csv", key="m5_sales")
+        st.write("Import official M5 wide sales, calendar and weekly price files. The bundled observed sample is ready without uploading anything.")
+        m5_sales = st.file_uploader("M5 sales_train_evaluation.csv", type="csv", key="m5_sales")
         m5_calendar = st.file_uploader("M5 calendar.csv", type="csv", key="m5_calendar")
         m5_prices = st.file_uploader("M5 sell_prices.csv", type="csv", key="m5_prices")
         a, b = st.columns(2)
@@ -266,9 +248,7 @@ def data_studio(data: pd.DataFrame) -> None:
                     st.rerun()
                 except ValueError as exc:
                     st.error(str(exc))
-        if st.session_state.get("mode") == "m5":
-            st.warning("M5 supplies sales and prices, but not observed inventory or unit cost. Inventory planning and profit metrics are unavailable for this sample; missing prices remain missing.")
-            st.caption(f"Missing price observations: {st.session_state.get('m5_missing_prices', 0):,}.")
+        st.caption("M5 has no stock or unit cost. Inventory orders and gross profit are unavailable without retailer records.")
     with database:
         st.write("SQLite works locally by default. Set DATABASE_MODE=mysql and credentials to use MySQL; connection failure falls back to SQLite.")
         if st.button("Save current dataset to database"):
@@ -291,25 +271,43 @@ def data_studio(data: pd.DataFrame) -> None:
 def analytics(data: pd.DataFrame) -> None:
     values = kpis(data)
     currency = currency_symbol()
-    cols = st.columns(5)
-    profit = f"{currency}{values['profit']:,.0f}" if np.isfinite(values["profit"]) else "Unavailable"
-    for col, (label, value) in zip(cols, [("Revenue", f"{currency}{values['revenue']:,.0f}"), ("Gross profit", profit), ("Units", f"{values['units']:,.0f}"), ("Average price", f"{currency}{values['average_price']:,.0f}"), ("Returns", f"{values['returns']:,.0f}")]):
+    displayed = [("Units sold", f"{values['units']:,.0f}"), ("Product / store pairs", f"{data.groupby(['product_id','store_id']).ngroups:,}")]
+    if np.isfinite(values["revenue"]):
+        displayed.insert(0, ("Observed revenue", f"{currency}{values['revenue']:,.0f}"))
+        displayed.append(("Average observed selling price", f"{currency}{values['average_price']:,.2f}"))
+    if np.isfinite(values["profit"]):
+        displayed.append(("Gross profit", f"{currency}{values['profit']:,.0f}"))
+    if np.isfinite(values["returns"]):
+        displayed.append(("Recorded returns", f"{values['returns']:,.0f}"))
+    cols = st.columns(len(displayed))
+    for col, (label, value) in zip(cols, displayed):
         col.metric(label, value)
+    if data.price.isna().any():
+        st.caption(f"Revenue includes {data.price.notna().sum():,} priced observations; {data.price.isna().sum():,} unpriced observations are excluded, not valued at zero.")
     trend_tab, product_tab, region_tab, signal_tab = st.tabs(["Sales trends", "Products & categories", "Stores & regions", "Demand signals"])
     with trend_tab:
         trend = daily_trend(data)
-        metric = st.selectbox("Trend metric", ["revenue", "units", "profit"])
+        choices = ["units"] + (["revenue"] if data.price.notna().any() else []) + (["profit"] if data.unit_cost.notna().any() else [])
+        metric = st.selectbox("Trend metric", choices)
         chart(px.line(trend, x="date", y=metric, title=f"Daily {metric}", markers=False, color_discrete_sequence=[COLORS[0]]))
     with product_tab:
         summary = product_summary(data)
-        st.dataframe(summary[["product", "category", "units", "revenue", "profit", "margin_pct", "demand_cv", "stock", "days_cover", "days_since_sale", "status"]].round(2), hide_index=True, width="stretch")
+        columns = ["product", "category", "units", "demand_cv", "days_since_sale"]
+        if data.price.notna().any():
+            columns += ["revenue"]
+        if data.unit_cost.notna().any():
+            columns += ["profit", "margin_pct"]
+        if data.stock.notna().any():
+            columns += ["stock", "days_cover", "status"]
+        st.dataframe(summary[columns].round(2), hide_index=True, width="stretch")
         category = dimension_summary(data, "category")
-        chart(px.bar(category, x="category", y="revenue", color="category", title="Revenue by category", color_discrete_sequence=COLORS))
+        chart(px.bar(category, x="category", y="units", color="category", title="Observed demand by category", color_discrete_sequence=COLORS))
     with region_tab:
         choice = st.radio("Group by", ["store", "region"], horizontal=True)
         summary = dimension_summary(data, choice)
-        chart(px.bar(summary, x=choice, y="revenue", color=choice, title=f"Revenue by {choice}", color_discrete_sequence=COLORS))
-        st.dataframe(summary.round(2), hide_index=True, width="stretch")
+        chart(px.bar(summary, x=choice, y="units", color=choice, title=f"Observed units by {choice}", color_discrete_sequence=COLORS))
+        visible = [choice, "units"] + (["revenue"] if data.price.notna().any() else []) + (["latest_stock"] if data.stock.notna().any() else [])
+        st.dataframe(summary[visible].round(2), hide_index=True, width="stretch")
         if {"latitude", "longitude"}.issubset(data.columns):
             locations = data.sort_values("date").drop_duplicates("store_id", keep="last")
             locations = locations.dropna(subset=["latitude", "longitude"])
@@ -323,14 +321,11 @@ def analytics(data: pd.DataFrame) -> None:
         with a:
             chart(px.bar(weekday_pattern(data), x="weekday", y="mean_units", title="Mean units by weekday", color_discrete_sequence=[COLORS[0]]))
         with b:
-            effect = promotion_effect(data)
-            chart(px.bar(effect, x="promotion", y="mean_units", title="Promotion vs non-promotion observations", color="promotion", color_discrete_sequence=[COLORS[1], COLORS[0]]))
-        labels = effect.promotion.astype(str).str.lower()
-        if set(labels) == {"false", "true"}:
-            ordinary = effect.loc[labels.eq("false")].iloc[0]
-            promoted = effect.loc[labels.eq("true")].iloc[0]
-            change = (promoted.mean_units / ordinary.mean_units - 1) * 100 if ordinary.mean_units else float("nan")
-            st.caption(f"Observed promoted days: {promoted.mean_units - ordinary.mean_units:+.1f} units and {currency}{promoted.mean_revenue - ordinary.mean_revenue:+,.0f} revenue per record versus non-promoted days ({change:+.1f}% units). This comparison is not a causal uplift estimate.")
+            if data.promotion.notna().any():
+                effect = promotion_effect(data)
+                chart(px.bar(effect, x="promotion", y="mean_units", title="Observed demand by promotion label", color="promotion", color_discrete_sequence=[COLORS[1], COLORS[0]]))
+            else:
+                st.info("Promotion labels are unavailable in this dataset.")
         holidays = holiday_effect(data)
         if holidays.empty:
             st.info("Holiday labels are unavailable for this dataset.")
@@ -343,7 +338,7 @@ def analytics(data: pd.DataFrame) -> None:
             if set(holiday_labels) == {"false", "true"}:
                 ordinary = holidays.loc[holiday_labels.eq("false")].iloc[0]
                 holiday = holidays.loc[holiday_labels.eq("true")].iloc[0]
-                st.caption(f"Holiday-labeled records average {holiday.mean_units - ordinary.mean_units:+.1f} units and {currency}{holiday.mean_revenue - ordinary.mean_revenue:+,.0f} revenue per record versus ordinary records. This observed difference is not a causal holiday effect.")
+                st.caption(f"Holiday-labeled records average {holiday.mean_units - ordinary.mean_units:+.1f} units per record versus ordinary records. This observed difference is not a causal holiday effect.")
         relation = approximate_price_relationship(data)
         if pd.notna(relation["elasticity"]):
             st.info(f"Approximate log-price/log-demand association: {relation['elasticity']:.2f}; log-scale correlation {relation['correlation']:.2f}. {relation['note']}.")
@@ -372,6 +367,8 @@ def analytics(data: pd.DataFrame) -> None:
 
 
 def forecast_lab(data: pd.DataFrame) -> None:
+    if st.session_state.get("mode", "m5") == "m5":
+        st.info(f"Historical research forecast: M5 observations end {data.date.max():%d %b %Y}. Predicted dates are an archival evaluation, not current operational demand.")
     products = data[["product_id", "product"]].drop_duplicates().sort_values("product")
     names = dict(zip(products.product_id, products["product"]))
     a, b, c, d, e = st.columns(5)
@@ -576,7 +573,8 @@ def reports(data: pd.DataFrame, plan: pd.DataFrame) -> None:
     with b:
         download_csv("KPI summary · CSV", summary, "kpis.csv")
     with c:
-        download_csv("Recommendations · CSV", plan, "inventory_recommendations.csv")
+        if not plan.empty:
+            download_csv("Recommendations · CSV", plan, "inventory_recommendations.csv")
     if not insights.empty:
         download_csv("Insights & alerts · CSV", insights, "alerts.csv")
     if "forecast_result" in st.session_state:
@@ -584,10 +582,10 @@ def reports(data: pd.DataFrame, plan: pd.DataFrame) -> None:
         download_csv("Model metrics · CSV", st.session_state.forecast_result.comparison, "model_metrics.csv")
     st.subheader("Current dataset profile")
     report = assess_quality(data)
-    st.json({"source": st.session_state.get("source", "included demo"), "rows": report.rows, "columns": report.columns,
+    st.json({"source": st.session_state.get("source", "M5 observed sample"), "rows": report.rows, "columns": report.columns,
              "date_start": str(data.date.min().date()), "date_end": str(data.date.max().date()), "health_score": report.score,
              "products": int(data.product_id.nunique()), "stores": int(data.store_id.nunique()),
-             "version": dataset_metadata(data, st.session_state.get("source", "included demo"),
+             "version": dataset_metadata(data, st.session_state.get("source", "M5 observed sample"),
                                          st.session_state.get("dataset_created_at"))})
 
 
@@ -615,21 +613,28 @@ def settings_page() -> None:
 def main() -> None:
     if "dataset_created_at" not in st.session_state:
         st.session_state.dataset_created_at = datetime.now(timezone.utc).isoformat()
-    with st.sidebar:
-        st.markdown('<div class="brand">▥ RetailMind <span>AI</span></div><div class="brand-sub">Turn retail data into action</div>', unsafe_allow_html=True)
-        page = st.radio("Workspace", ["Overview", "Data studio", "Analytics", "Forecast lab", "Inventory", "Scenarios", "Insights", "Reports", "Settings"], label_visibility="collapsed")
-        st.divider()
-        st.caption(f"SOURCE · {st.session_state.get('source', 'included demo').upper()}")
-        st.caption("Deterministic demo data · no paid API")
     all_data = base_data()
-    titles = {"Overview": ("Retail intelligence, in one view", "From sales signals to confident inventory decisions."),
-              "Data studio": ("Data studio", "Bring in a dataset, inspect its health, and document every cleaning step."),
-              "Analytics": ("Business analytics", "Understand observed sales by time, product, store and region."),
-              "Forecast lab": ("Forecast lab", "Compare models with rolling-origin tests before trusting a demand forecast."),
-              "Inventory": ("Inventory intelligence", "Prioritize stock risk and turn demand variability into replenishment quantities."),
+    required_inventory = ("stock", "unit_cost", "lead_time", "supplier")
+    inventory_ready = all(col in all_data and all_data[col].notna().all() for col in required_inventory)
+    pages_available = ["Overview", "Data studio", "Analytics", "Forecast lab", "Inventory", "Insights", "Reports"]
+    if inventory_ready:
+        pages_available += ["Scenarios", "Settings"]
+    with st.sidebar:
+        st.markdown('<div class="brand">◈ RetailMind <span>AI</span></div><div class="brand-sub">RETAIL INTELLIGENCE PLATFORM</div>', unsafe_allow_html=True)
+        page = st.radio("Workspace", pages_available)
+        st.divider()
+        start_label = f"{all_data.date.min():%d %b %Y}" if all_data.date.notna().any() else "Dates unavailable"
+        end_label = f"{all_data.date.max():%d %b %Y}" if all_data.date.notna().any() else "Dates unavailable"
+        st.markdown(f'<div class="sidebar-source"><span>DATA SOURCE</span><strong>{html.escape(st.session_state.get("source", "M5 observed sample"))}</strong><small>{start_label} — {end_label}</small><small>{len(all_data):,} observed rows</small></div>', unsafe_allow_html=True)
+        st.caption("Historical research data · latest observation 2016")
+    titles = {"Overview": ("Retail intelligence", "An evidence-led view of observed sales and demand."),
+              "Data studio": ("Data studio", "Trace each input and inspect data quality."),
+              "Analytics": ("Sales analytics", "Explore observed demand by time, product, store and region."),
+              "Forecast lab": ("Forecast lab", "Compare models on held-out history and inspect their errors."),
+              "Inventory": ("Inventory intelligence", "Inventory measures require observed stock and supply records."),
               "Scenarios": ("What-if scenarios", "Change operating assumptions and see the simulated inventory and margin outcome."),
-              "Insights": ("Insights & alerts", "Evidence-backed signals with a clear distinction between observation and recommendation."),
-              "Reports": ("Reports", "Export the evidence behind your retail decisions."),
+              "Insights": ("Insights & alerts", "Signals derived from observed sales and demand."),
+              "Reports": ("Reports", "Export the observed data and model evidence."),
               "Settings": ("Settings", "Make inventory classification and service assumptions explicit.")}
     heading(*titles[page])
     if page == "Data studio":
@@ -647,16 +652,17 @@ def main() -> None:
     if filtered.empty and page != "Data studio":
         st.warning("No records match the selected filters. Broaden the date or entity selection.")
         return
-    benchmark_mode = st.session_state.get("mode") == "m5"
+    benchmark_mode = st.session_state.get("mode", "m5") == "m5"
     if benchmark_mode:
-        missing_prices = int(filtered.price.isna().sum())
-        st.info(f"M5 benchmark mode: sales and forecasting are available; inventory and profit require retailer-supplied stock and unit costs. {missing_prices:,} selected rows lack a price, so revenue is a partial observed total.")
+        st.caption(f"HISTORICAL M5 OBSERVATIONS · latest recorded sale {filtered.date.max():%d %b %Y} · {filtered.price.isna().sum():,} selected rows have no observed selling price")
     risk_policy = current_risk_settings()
-    plan = (pd.DataFrame(columns=["risk", "recommended_order", "days_cover"]) if benchmark_mode else
+    plan = (pd.DataFrame(columns=["risk", "recommended_order", "days_cover"]) if not inventory_ready else
             cached_plan(filtered, st.session_state.get("service_level", 0.95), risk_policy,
                         dict(st.session_state.get("forecast_error_rates", {}))))
-    if benchmark_mode and page in {"Inventory", "Scenarios"}:
-        st.warning("Inventory planning and scenarios need observed stock and unit cost, which M5 does not provide.")
+    if not inventory_ready and page == "Inventory":
+        missing = [col for col in required_inventory if col not in filtered or filtered[col].isna().any()]
+        st.markdown(f'<div class="empty-state"><span class="eyebrow">DATA AVAILABILITY</span><h3>Inventory planning is unavailable</h3><p>Missing observed inputs: {html.escape(", ".join(missing))}. Risk scores, reorder quantities and profit cannot be verified for this selection.</p></div>', unsafe_allow_html=True)
+        st.info("Upload real inventory snapshots with stock, unit_cost, supplier and lead_time in Data studio to enable planning.")
         return
     pages = {"Overview": overview, "Analytics": analytics, "Forecast lab": forecast_lab,
              "Inventory": inventory_page, "Scenarios": scenarios, "Insights": insights_page, "Reports": reports}

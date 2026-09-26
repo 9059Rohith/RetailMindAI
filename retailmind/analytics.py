@@ -8,40 +8,42 @@ from scipy.stats import theilslopes
 
 def kpis(data: pd.DataFrame) -> dict[str, float]:
     if data.empty:
-        return {key: 0.0 for key in ("revenue", "units", "profit", "margin", "average_price", "growth", "returns", "stockouts")}
-    revenue = float(data["revenue"].sum())
+        return {key: float("nan") for key in ("revenue", "units", "profit", "margin", "average_price", "growth", "returns", "stockouts")}
+    revenue = float(data["revenue"].sum(min_count=1))
     ordered = data.assign(period=pd.to_datetime(data["date"]).dt.to_period("M"))
     monthly = ordered.groupby("period")["revenue"].sum()
     growth = float((monthly.iloc[-1] / monthly.iloc[-2] - 1) * 100) if len(monthly) > 1 and monthly.iloc[-2] else 0.0
     profit = float(data["profit"].sum(min_count=1))
+    priced_units = data.loc[data.price.notna(), "units"].sum()
     return {"revenue": revenue, "units": float(data["units"].sum()), "profit": profit,
             "margin": profit / revenue * 100 if revenue and np.isfinite(profit) else float("nan"),
-            "average_price": revenue / data["units"].sum() if data["units"].sum() else 0.0,
-            "growth": growth, "returns": float(data["returns"].sum()),
-            "stockouts": float(data["stockout"].sum())}
+            "average_price": revenue / priced_units if priced_units and np.isfinite(revenue) else float("nan"),
+            "growth": growth, "returns": float(data["returns"].sum(min_count=1)),
+            "stockouts": float(data["stockout"].sum(min_count=1)) if data["stockout"].notna().any() else float("nan")}
 
 
 def daily_trend(data: pd.DataFrame) -> pd.DataFrame:
-    return data.groupby("date", as_index=False).agg(revenue=("revenue", "sum"), units=("units", "sum"), profit=("profit", "sum"))
+    return data.groupby("date", as_index=False).agg(revenue=("revenue", lambda x: x.sum(min_count=1)),
+                                                     units=("units", "sum"), profit=("profit", lambda x: x.sum(min_count=1)))
 
 
 def product_summary(data: pd.DataFrame) -> pd.DataFrame:
     if data.empty:
         return pd.DataFrame()
     keys = ["product_id", "product", "category"]
-    grouped = data.groupby(keys).agg(units=("units", "sum"), revenue=("revenue", "sum"), profit=("profit", "sum"),
+    grouped = data.groupby(keys, dropna=False).agg(units=("units", "sum"), revenue=("revenue", lambda x: x.sum(min_count=1)), profit=("profit", lambda x: x.sum(min_count=1)),
                                       unit_cost=("unit_cost", "mean"), stockouts=("stockout", "mean"))
-    daily = data.groupby(keys + ["date"], as_index=False)["units"].sum()
-    demand = daily.groupby(keys)["units"].agg(daily_mean="mean", daily_std="std")
+    daily = data.groupby(keys + ["date"], as_index=False, dropna=False)["units"].sum()
+    demand = daily.groupby(keys, dropna=False)["units"].agg(daily_mean="mean", daily_std="std")
     grouped[["daily_mean", "daily_std"]] = demand
-    latest_per_store = data.sort_values("date").groupby(keys + ["store_id"], as_index=False)["stock"].last()
-    grouped["stock"] = latest_per_store.groupby(keys)["stock"].sum(min_count=1)
-    sold = data[data.units.gt(0)].groupby(keys)["date"].max()
+    latest_per_store = data.sort_values("date").groupby(keys + ["store_id"], as_index=False, dropna=False)["stock"].last()
+    grouped["stock"] = latest_per_store.groupby(keys, dropna=False)["stock"].sum(min_count=1)
+    sold = data[data.units.gt(0)].groupby(keys, dropna=False)["date"].max()
     grouped["last_sale_date"] = sold
     observed_days = int((data.date.max() - data.date.min()).days) + 1
     grouped["days_since_sale"] = (data.date.max() - grouped.last_sale_date).dt.days.fillna(observed_days).astype(int)
     grouped["dead_stock"] = grouped.stock.gt(0) & grouped.days_since_sale.ge(30)
-    grouped["margin_pct"] = np.where(grouped.revenue > 0, grouped.profit / grouped.revenue * 100, 0)
+    grouped["margin_pct"] = grouped.profit.div(grouped.revenue.where(grouped.revenue.gt(0))) * 100
     grouped["demand_cv"] = grouped.daily_std.fillna(0) / grouped.daily_mean.replace(0, np.nan)
     grouped["days_cover"] = grouped.stock / grouped.daily_mean.replace(0, np.nan)
     grouped["inventory_value"] = grouped.stock * grouped.unit_cost
@@ -53,8 +55,8 @@ def product_summary(data: pd.DataFrame) -> pd.DataFrame:
 def dimension_summary(data: pd.DataFrame, dimension: str) -> pd.DataFrame:
     if dimension not in {"category", "store", "region", "product"}:
         raise ValueError("Unsupported dimension")
-    grouped = data.groupby(dimension, as_index=False).agg(revenue=("revenue", "sum"), units=("units", "sum"), profit=("profit", "sum"), stockouts=("stockout", "sum"))
-    grouped["margin_pct"] = np.where(grouped.revenue > 0, grouped.profit / grouped.revenue * 100, 0)
+    grouped = data.groupby(dimension, as_index=False, dropna=False).agg(revenue=("revenue", lambda x: x.sum(min_count=1)), units=("units", "sum"), profit=("profit", lambda x: x.sum(min_count=1)), stockouts=("stockout", lambda x: x.sum(min_count=1)))
+    grouped["margin_pct"] = grouped.profit.div(grouped.revenue.where(grouped.revenue.gt(0))) * 100
     latest = data.sort_values("date").groupby(["product_id", "store_id"], as_index=False).tail(1)
     stock = latest.groupby(dimension)["stock"].sum(min_count=1)
     grouped["latest_stock"] = grouped[dimension].map(stock)

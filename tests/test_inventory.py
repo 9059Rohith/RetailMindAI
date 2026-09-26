@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from retailmind.data import generate_retail_data
+from tests.synthetic_fixtures import generate_retail_data
 from retailmind.inventory import (RiskSettings, abc_xyz, allocate_limited_stock, economic_order_quantity,
                                   plan_replenishment, reorder_point, safety_stock, scenario, stockout_trajectory)
 from retailmind.analytics import product_summary

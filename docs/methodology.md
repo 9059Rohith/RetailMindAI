@@ -1,19 +1,21 @@
 # Research methodology
 
-## What each output means
+## Evidence chain
 
-| Output | Status | Interpretation |
+The application starts with observed M5 sales, calendar and weekly selling-price records. [`scripts/prepare_m5.py`](../scripts/prepare_m5.py) selects five product/store series per store/category using a stable SHA-256 rank that does not depend on demand. The last 731 observed days are converted from the wide M5 format, joined to source calendar/price records, and saved as the bundled sample. Checksums and missing-price count are in [`data/m5_source.json`](../data/m5_source.json).
+
+Data studio checks required IDs, dates and nonnegative sold units; optional fields are reported for availability. Explicit cleaning quarantines invalid rows without filling or capping measurements. Revenue is computed only when price is observed. Profit and inventory planning require additional retailer data and are unavailable for M5.
+
+## Interpretation
+
+| Output | Status | Meaning |
 | --- | --- | --- |
-| Sales KPIs and category rankings | Observation | Aggregates of selected historical records |
-| Promotion/holiday comparisons and price association | Statistical association | Confounded by seasonality, product mix and other variables |
-| Future demand | Model prediction | Extrapolation evaluated on earlier held-out periods |
-| Forecast band | Empirical uncertainty | Held-out absolute-error quantile; future coverage is not guaranteed |
-| Risk and reorder quantity | Policy recommendation | Formula result using chosen service level and cost assumptions |
-| What-if result | Simulation | Assumed elasticity and promotion uplift, not causal impact |
-| Allocation | Optimization | Maximum weighted fulfillment under a single supply constraint |
+| Units, priced revenue and category/store rankings | Observation | Aggregate of selected historical records |
+| Holiday comparisons and price association | Description | Associations that may reflect product mix and seasonality |
+| Seasonal baseline and Forecast lab result | Prediction | Archival extrapolation from historical sales |
+| Held-out residual band | Empirical sensitivity | Historical error spread, without guaranteed future coverage |
+| Inventory risk/order quantity | Conditional policy | Requires actual stock, cost, supplier and lead-time records |
 
-## Reproducibility
+Forecast lab compares baseline, statistical and machine-learning models with expanding-window folds. Demand-derived features are shifted to past-only values. The selected model minimizes historical mean WAPE, using MAE to break ties. The forest and gradient boosting estimators have fixed random state 42 for reproducibility. Source prices, future promotions and stock are never used as unknown future inputs.
 
-The generator uses NumPy's `default_rng(seed=42)` and a fixed end date (2025-12-31). The committed demo is 12 products × 4 stores × 120 days. The larger generator supports at least 50 products and 10 stores. Forest and gradient boosting models use random state 42. The evaluation command writes actual fold results to `artifacts/model_comparison.csv`; this generated artifact is intentionally not committed.
-
-The data are synthetic, so project outputs prove system behavior and reproducibility, not external validity on a real retailer. There are no real-world ROI claims.
+Run `python -m scripts.evaluate --horizon 14` to write fold metrics under `artifacts/`; run the [full M5 study](m5_validation.md) to reproduce external holdout evidence. These are time-series research results, not causal or financial-impact estimates.

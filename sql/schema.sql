@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
 CREATE TABLE IF NOT EXISTS products (
   product_id VARCHAR(64) PRIMARY KEY,
   product_name VARCHAR(255) NOT NULL,
-  category_id VARCHAR(100) NOT NULL,
+  category_id VARCHAR(100),
   supplier_id VARCHAR(100),
   FOREIGN KEY (category_id) REFERENCES categories(category_id),
   FOREIGN KEY (supplier_id) REFERENCES suppliers(supplier_id)
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE TABLE IF NOT EXISTS stores (
   store_id VARCHAR(64) PRIMARY KEY,
   store_name VARCHAR(255) NOT NULL,
-  region_id VARCHAR(100) NOT NULL,
+  region_id VARCHAR(100),
   latitude DECIMAL(9,6),
   longitude DECIMAL(9,6),
   FOREIGN KEY (region_id) REFERENCES regions(region_id)
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS calendar (
   weekday_num TINYINT NOT NULL,
   month_num TINYINT NOT NULL,
   year_num SMALLINT NOT NULL,
-  holiday BOOLEAN NOT NULL DEFAULT FALSE
+  holiday BOOLEAN
 );
 CREATE TABLE IF NOT EXISTS promotions (
   promotion_id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS promotions (
   store_id VARCHAR(64),
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
-  discount_rate DECIMAL(7,4) NOT NULL DEFAULT 0,
+  discount_rate DECIMAL(7,4),
   CHECK (discount_rate >= 0 AND discount_rate < 1),
   CHECK (end_date >= start_date),
   FOREIGN KEY (product_id) REFERENCES products(product_id),
@@ -65,8 +65,8 @@ CREATE TABLE IF NOT EXISTS sales (
   store_id VARCHAR(64) NOT NULL,
   units DECIMAL(14,2) NOT NULL,
   unit_price DECIMAL(14,2),
-  returns_units DECIMAL(14,2) NOT NULL DEFAULT 0,
-  promotion BOOLEAN NOT NULL DEFAULT FALSE,
+  returns_units DECIMAL(14,2),
+  promotion BOOLEAN,
   CHECK (units >= 0),
   CHECK (returns_units >= 0),
   PRIMARY KEY (sale_date, product_id, store_id),

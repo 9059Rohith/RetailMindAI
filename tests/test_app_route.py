@@ -21,7 +21,7 @@ def test_all_invalid_dates_reach_quality_review_without_crashing():
     assert any(metric.label == "Health score" and metric.value == "0%" for metric in app.metric)
 
 
-def test_demo_analytics_shows_holiday_and_seasonality_views():
+def test_observed_analytics_shows_holiday_and_seasonality_views():
     app = AppTest.from_file(APP, default_timeout=120).run()
     next(radio for radio in app.radio if radio.label == "Workspace").set_value("Analytics").run()
     assert not app.exception
@@ -40,11 +40,10 @@ def test_m5_mode_disables_inventory_without_fabricating_stock():
     app.session_state["mode"] = "m5"
     app.radio[0].set_value("Overview").run()
     assert not app.exception
-    assert any("M5 benchmark mode" in item.value for item in app.info)
-    assert any(metric.label == "Gross margin" and metric.value == "Unavailable" for metric in app.metric)
+    assert not any(metric.label == "Gross margin" for metric in app.metric)
     app.radio[0].set_value("Analytics").run()
     assert not app.exception
     assert any("Holiday labels are unavailable" in item.value for item in app.info)
     next(radio for radio in app.radio if radio.label == "Workspace").set_value("Inventory").run()
     assert not app.exception
-    assert any("Inventory planning and scenarios need observed stock" in item.value for item in app.warning)
+    assert any("Upload real inventory snapshots" in item.value for item in app.info)

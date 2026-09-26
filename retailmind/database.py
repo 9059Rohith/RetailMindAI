@@ -70,49 +70,50 @@ def _save_mysql_dimensions_and_facts(data: pd.DataFrame, engine: Engine) -> None
     def execute(connection, sql: str, rows: list[dict]) -> None:
         if rows:
             connection.execute(text(sql), rows)
-    category = source.category.fillna("Unknown").astype(str)
-    region = source.region.fillna("Unknown").astype(str)
-    supplier = source.supplier.fillna("Unknown").astype(str)
+    category = source.category.dropna().astype(str).unique()
+    region = source.region.dropna().astype(str).unique()
+    supplier = source.supplier.dropna().astype(str).unique()
     with engine.begin() as connection:
         # The UI stores one current dataset, so facts must mirror its snapshot.
         # Keep dimensions for existing forecast/model references.
         for table in ("promotions", "prices", "sales", "inventory"):
             connection.execute(text(f"DELETE FROM {table}"))
         execute(connection, "INSERT INTO categories(category_id,category_name) VALUES (:id,:name) ON DUPLICATE KEY UPDATE category_name=VALUES(category_name)",
-                [{"id": item, "name": item} for item in sorted(category.unique())])
+                [{"id": item, "name": item} for item in sorted(category)])
         execute(connection, "INSERT INTO regions(region_id,region_name) VALUES (:id,:name) ON DUPLICATE KEY UPDATE region_name=VALUES(region_name)",
-                [{"id": item, "name": item} for item in sorted(region.unique())])
+                [{"id": item, "name": item} for item in sorted(region)])
         execute(connection, "INSERT INTO suppliers(supplier_id,supplier_name) VALUES (:id,:name) ON DUPLICATE KEY UPDATE supplier_name=VALUES(supplier_name)",
-                [{"id": item, "name": item} for item in sorted(supplier.unique())])
-        product_rows = source.assign(category=category, supplier=supplier).drop_duplicates("product_id", keep="last")
+                [{"id": item, "name": item} for item in sorted(supplier)])
+        product_rows = source.drop_duplicates("product_id", keep="last")
         execute(connection, "INSERT INTO products(product_id,product_name,category_id,supplier_id) VALUES (:id,:name,:category,:supplier) ON DUPLICATE KEY UPDATE product_name=VALUES(product_name),category_id=VALUES(category_id),supplier_id=VALUES(supplier_id)",
-                [{"id": str(row.product_id), "name": str(row.product), "category": str(row.category), "supplier": str(row.supplier)}
+                [{"id": str(row.product_id), "name": str(row.product), "category": scalar(row.category), "supplier": scalar(row.supplier)}
                  for row in product_rows.itertuples()])
-        store_rows = source.assign(region=region).drop_duplicates("store_id", keep="last")
+        store_rows = source.drop_duplicates("store_id", keep="last")
         execute(connection, "INSERT INTO stores(store_id,store_name,region_id,latitude,longitude) VALUES (:id,:name,:region,:latitude,:longitude) ON DUPLICATE KEY UPDATE store_name=VALUES(store_name),region_id=VALUES(region_id),latitude=VALUES(latitude),longitude=VALUES(longitude)",
-                [{"id": str(row.store_id), "name": str(row.store), "region": str(row.region),
+                [{"id": str(row.store_id), "name": str(row.store), "region": scalar(row.region),
                   "latitude": scalar(getattr(row, "latitude", None)), "longitude": scalar(getattr(row, "longitude", None))}
                  for row in store_rows.itertuples()])
-        days = source.groupby("date", as_index=False).agg(holiday=("holiday", "max")) if "holiday" in source else source[["date"]].drop_duplicates()
+        days = source.groupby("date", as_index=False).agg(holiday=("holiday", "max"))
         execute(connection, "INSERT INTO calendar(calendar_date,weekday_num,month_num,year_num,holiday) VALUES (:date,:weekday,:month,:year,:holiday) ON DUPLICATE KEY UPDATE holiday=VALUES(holiday)",
                 [{"date": row.date.date(), "weekday": int(row.date.dayofweek), "month": int(row.date.month),
-                  "year": int(row.date.year), "holiday": bool(getattr(row, "holiday", False))}
+                  "year": int(row.date.year), "holiday": scalar(row.holiday)}
                  for row in days.itertuples()])
         execute(connection, "INSERT INTO promotions(product_id,store_id,start_date,end_date,discount_rate) VALUES (:product,:store,:date,:date,:discount)",
                 [{"product": str(row.product_id), "store": str(row.store_id), "date": row.date.date(),
-                  "discount": float(row.discount) if pd.notna(row.discount) else 0.0}
-                 for row in source[source.promotion.astype(bool)].itertuples()])
+                  "discount": scalar(row.discount)}
+                 for row in source[source.promotion.fillna(False)].itertuples()])
         price_rows = source[source.price.notna()]
         execute(connection, "INSERT INTO prices(product_id,store_id,effective_date,unit_price) VALUES (:product,:store,:date,:price) ON DUPLICATE KEY UPDATE unit_price=VALUES(unit_price)",
                 [{"product": str(row.product_id), "store": str(row.store_id), "date": row.date.date(),
                   "price": float(row.price)} for row in price_rows.itertuples()])
         execute(connection, "INSERT INTO sales(sale_date,product_id,store_id,units,unit_price,returns_units,promotion) VALUES (:date,:product,:store,:units,:price,:returns,:promotion) ON DUPLICATE KEY UPDATE units=VALUES(units),unit_price=VALUES(unit_price),returns_units=VALUES(returns_units),promotion=VALUES(promotion)",
                 [{"date": row.date.date(), "product": str(row.product_id), "store": str(row.store_id),
-                  "units": float(row.units), "price": scalar(row.price), "returns": float(row.returns),
-                  "promotion": bool(row.promotion)} for row in source.itertuples()])
+                  "units": float(row.units), "price": scalar(row.price), "returns": scalar(row.returns),
+                  "promotion": scalar(row.promotion)} for row in source.itertuples()])
         execute(connection, "INSERT INTO inventory(snapshot_date,product_id,store_id,on_hand,lead_time_days) VALUES (:date,:product,:store,:stock,:lead) ON DUPLICATE KEY UPDATE on_hand=VALUES(on_hand),lead_time_days=VALUES(lead_time_days)",
                 [{"date": row.date.date(), "product": str(row.product_id), "store": str(row.store_id),
-                  "stock": scalar(row.stock), "lead": scalar(row.lead_time)} for row in source.itertuples()])
+                  "stock": scalar(row.stock), "lead": scalar(row.lead_time)}
+                 for row in source[source.stock.notna() | source.lead_time.notna()].itertuples()])
 
 
 def load_sales(engine: Engine) -> pd.DataFrame:

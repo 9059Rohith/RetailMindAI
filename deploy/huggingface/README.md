@@ -14,4 +14,4 @@ An open-source retail intelligence application that connects data quality, obser
 
 **Source, methodology, tests, and full documentation:** [GitHub repository](https://github.com/9059Rohith/RetailMindAI)
 
-The included demo is synthetic. Forecast ranges are heuristic, stock risk is a policy score, and scenario results depend on explicit assumptions.
+The included subset contains observed M5 retail sales. Forecast ranges are empirical and not guaranteed; M5 provides no physical inventory, unit cost, or lead time, so inventory recommendations are unavailable without separate retailer records.

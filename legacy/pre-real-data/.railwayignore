@@ -1,0 +1,12 @@
+docs/
+notebooks/
+tests/
+scripts/
+sql/
+deploy/
+ci/
+README.md
+LICENSE
+docker-compose.yml
+requirements-dev.txt
+.env.example

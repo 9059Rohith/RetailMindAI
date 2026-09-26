@@ -1,5 +1,7 @@
 # Inventory policies and simulation
 
+**Data availability:** the bundled real M5 observations contain no stock on hand, unit cost, supplier or lead time. Inventory and scenario pages therefore do not calculate a risk score, order, EOQ or margin for M5. The formulas below document optional library functionality for a retailer dataset that supplies those measured inputs. Default policy thresholds and costs are assumptions and require business review.
+
 Daily demand mean and standard deviation are measured for each product/store pair. The latest stock snapshot per pair is used for planning.
 
 - **Safety stock** = `z(service level) × daily demand std × sqrt(lead time)`.
