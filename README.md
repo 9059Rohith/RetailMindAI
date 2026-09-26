@@ -6,7 +6,7 @@
 
 An interactive Streamlit research platform for **AI-driven retail demand forecasting and sales analytics**.
 
-[Watch the walkthrough](#watch-the-working-application) · [Screenshots](#application-gallery) · [Real data](#the-data) · [Run it](#run-it) · [Verification](#verification-evidence) · [Deployment](docs/deployment.md)
+[Launch the live app](https://retailmindai-xfekkmevt9zabpnngqtcq8.streamlit.app/) · [Watch the walkthrough](#watch-the-working-application) · [Screenshots](#application-gallery) · [Real data](#the-data) · [Run it](#run-it) · [Verification](#verification-evidence) · [Deployment](docs/deployment.md)
 
 </div>
 
@@ -201,9 +201,11 @@ The capture script accepts `--browser-path` for a local Chromium/Edge executable
 
 ## Deploy on Streamlit Community Cloud
 
-The code is in [GitHub](https://github.com/9059Rohith/RetailMindAI) on `main`. In Community Cloud choose the repository, branch **`main`**, and entrypoint **`app/main.py`**. Dependencies are in root `requirements.txt`; the real bundled data ships with the repo. No secrets are needed to start the public app.
+**Live application:** [retailmindai-xfekkmevt9zabpnngqtcq8.streamlit.app](https://retailmindai-xfekkmevt9zabpnngqtcq8.streamlit.app/). The public deployment was opened and its observed M5 dashboard and analytics were verified on 26 September 2026.
 
-The message **“app’s code is not connected to a remote GitHub repository”** can persist even after `git push` when the Community Cloud account has not authorized GitHub repository access. The repository owner must [connect their GitHub account to Community Cloud](https://docs.streamlit.io/deploy/streamlit-community-cloud/get-started/connect-your-github-account) and have admin access to the repository. This account authorization is separate from the local Git remote. Detailed instructions are in the [deployment guide](docs/deployment.md). A public `streamlit.app` URL should be shared only after an actual successful deployment.
+The code is in [GitHub](https://github.com/9059Rohith/RetailMindAI) on `main`. To reproduce the deployment in Community Cloud, choose the repository, branch **`main`**, and entrypoint **`app/main.py`**. Dependencies are in root `requirements.txt`; the real bundled data ships with the repo. No secrets are needed to start the public app.
+
+If Community Cloud shows **“app’s code is not connected to a remote GitHub repository”** while creating another app, the repository owner must [connect their GitHub account to Community Cloud](https://docs.streamlit.io/deploy/streamlit-community-cloud/get-started/connect-your-github-account) and have admin access to the repository. This account authorization is separate from the local Git remote. Detailed instructions are in the [deployment guide](docs/deployment.md).
 
 ## Academic scope and responsible interpretation
 

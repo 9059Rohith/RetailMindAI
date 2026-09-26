@@ -2,7 +2,9 @@
 
 ## Streamlit Community Cloud
 
-The application starts from the committed real M5 subset and needs no secret or database. Deploy the [GitHub repository](https://github.com/9059Rohith/RetailMindAI) with:
+**Live app:** [RetailMind AI on Streamlit Community Cloud](https://retailmindai-xfekkmevt9zabpnngqtcq8.streamlit.app/). The public dashboard and analytics loaded with the committed M5 observations on 26 September 2026.
+
+The application starts from the committed real M5 subset and needs no secret or database. To reproduce the deployment, deploy the [GitHub repository](https://github.com/9059Rohith/RetailMindAI) with:
 
 | Setting | Value |
 | --- | --- |
@@ -12,7 +14,7 @@ The application starts from the committed real M5 subset and needs no secret or 
 | Dependencies | Root `requirements.txt` |
 | Python | 3.12, when selectable |
 
-If Community Cloud says **“the app’s code is not connected to a remote GitHub repository”**, check that you are in the workspace for `9059Rohith` and that the repository owner has [connected and authorized GitHub](https://docs.streamlit.io/deploy/streamlit-community-cloud/get-started/connect-your-github-account). Streamlit requires admin permission on the repository. A local `git remote` or successful `git push` alone does not authorize the Community Cloud account. Then create the app with the settings above and verify its public URL and logs. No public URL is claimed before that succeeds.
+If Community Cloud says **“the app’s code is not connected to a remote GitHub repository”** while creating another app, check that you are in the workspace for `9059Rohith` and that the repository owner has [connected and authorized GitHub](https://docs.streamlit.io/deploy/streamlit-community-cloud/get-started/connect-your-github-account). Streamlit requires admin permission on the repository. A local `git remote` or successful `git push` alone does not authorize the Community Cloud account.
 
 The **Deploy** button inside the local Docker app also cannot discover the host's Git remote: Docker intentionally excludes `.git` from the image. Start deployment from [Community Cloud](https://share.streamlit.io/) using the pushed GitHub repository, rather than from that local button.
 
