@@ -1,0 +1,64 @@
+{
+  "scenes": [
+    {
+      "name": "Overview",
+      "start": 4.39,
+      "image": "dashboard.png"
+    },
+    {
+      "name": "Analytics",
+      "start": 16.92,
+      "image": "analytics.png"
+    },
+    {
+      "name": "Forecast lab",
+      "start": 25.05,
+      "image": "forecast.png"
+    },
+    {
+      "name": "Measured forecast",
+      "start": 48.51,
+      "image": "forecast-result.png"
+    },
+    {
+      "name": "Inventory",
+      "start": 59.61,
+      "image": "inventory.png"
+    },
+    {
+      "name": "Insights",
+      "start": 67.47,
+      "image": "insights.png"
+    },
+    {
+      "name": "Data studio",
+      "start": 75.03,
+      "image": "data-studio.png"
+    },
+    {
+      "name": "Reports",
+      "start": 85.98,
+      "image": "reports.png"
+    },
+    {
+      "name": "Overview",
+      "start": 98.5,
+      "image": "dashboard.png"
+    }
+  ],
+  "checks": {
+    "desktop_pages": [
+      "Overview",
+      "Analytics",
+      "Forecast lab",
+      "Inventory",
+      "Insights",
+      "Data studio",
+      "Reports"
+    ],
+    "forecast_csv": "downloaded and validated",
+    "sales_csv_rows": 109650,
+    "mobile_filter": "verified",
+    "console_errors": []
+  }
+}

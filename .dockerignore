@@ -5,5 +5,12 @@ __pycache__
 .ruff_cache
 artifacts
 legacy
+docs
+tests
+notebooks
+scripts/capture_walkthrough.py
+scripts/build_poster.py
+scripts/build_walkthrough_media.py
+scripts/render_narration.ps1
 *.db
 .env

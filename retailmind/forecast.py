@@ -15,6 +15,7 @@ from sklearn.inspection import permutation_importance
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.holtwinters import SimpleExpSmoothing
 from statsmodels.tsa.statespace.sarimax import SARIMAX
+from threadpoolctl import threadpool_limits
 
 
 @dataclass
@@ -101,16 +102,17 @@ def _predict_baseline(history: pd.Series, horizon: int, name: str) -> np.ndarray
 def _recursive_ml(history: pd.Series, horizon: int, name: str) -> np.ndarray:
     if len(history) < 70:
         raise ValueError("At least 70 daily observations are required for ML models.")
-    model = fit_model(history, name)
-    extended = history.copy()
-    output = []
-    for _ in range(horizon):
-        tomorrow = extended.index.max() + pd.offsets.Day(1)
-        candidate = pd.concat([extended, pd.Series([np.nan], index=[tomorrow])])
-        row = make_features(candidate).iloc[[-1]][list(FEATURES)]
-        prediction = max(0.0, float(model.predict(row)[0]))
-        output.append(prediction)
-        extended.loc[tomorrow] = prediction
+    with threadpool_limits(limits=2):
+        model = fit_model(history, name)
+        extended = history.copy()
+        output = []
+        for _ in range(horizon):
+            tomorrow = extended.index.max() + pd.offsets.Day(1)
+            candidate = pd.concat([extended, pd.Series([np.nan], index=[tomorrow])])
+            row = make_features(candidate).iloc[[-1]][list(FEATURES)]
+            prediction = max(0.0, float(model.predict(row)[0]))
+            output.append(prediction)
+            extended.loc[tomorrow] = prediction
     return np.asarray(output)
 
 
@@ -126,7 +128,7 @@ def fit_model(history: pd.Series, name: str):
     features = make_features(history)
     valid = features.notna().all(axis=1)
     if name == "Random forest":
-        model = RandomForestRegressor(n_estimators=60, min_samples_leaf=3, random_state=42, n_jobs=-1)
+        model = RandomForestRegressor(n_estimators=60, min_samples_leaf=3, random_state=42, n_jobs=1)
     else:
         model = HistGradientBoostingRegressor(max_iter=90, max_leaf_nodes=15, l2_regularization=1.0, random_state=42)
     model.fit(features.loc[valid, list(FEATURES)], history.loc[valid])
@@ -208,7 +210,7 @@ def explain_model(series: pd.Series, name: str) -> pd.DataFrame:
         return pd.DataFrame(columns=["feature", "importance"])
     features = make_features(series).dropna()
     target = series.loc[features.index]
-    model = (RandomForestRegressor(n_estimators=60, min_samples_leaf=3, random_state=42, n_jobs=-1) if name == "Random forest"
+    model = (RandomForestRegressor(n_estimators=60, min_samples_leaf=3, random_state=42, n_jobs=1) if name == "Random forest"
              else HistGradientBoostingRegressor(max_iter=90, max_leaf_nodes=15, l2_regularization=1.0, random_state=42))
     model.fit(features[list(FEATURES)], target)
     importance = permutation_importance(model, features[list(FEATURES)].tail(28), target.tail(28), n_repeats=3, random_state=42)

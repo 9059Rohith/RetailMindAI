@@ -11,6 +11,7 @@ from retailmind.analytics import kpis
 from retailmind.data import assess_quality, enrich
 from retailmind.database import load_sales, save_sales
 from retailmind.forecast import daily_series, run_forecast
+from retailmind.insights import build_insights
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data" / "m5_observed.csv.gz"
@@ -47,6 +48,23 @@ def test_real_product_forecast_uses_measured_history():
     assert result.future.date.min().date().isoformat() == "2016-05-23"
     assert result.comparison.WAPE.notna().any()
     assert result.future.forecast.ge(0).all()
+
+
+def test_default_real_data_forecast_compares_ml_models():
+    series = daily_series(observed(), "FOODS_1_018")
+    result = run_forecast(series, horizon=14, include_ml=True, include_statistical=False)
+    assert {"Random forest", "Gradient boosting"}.issubset(set(result.comparison.model))
+    assert len(result.future) == 14
+    assert result.future.forecast.ge(0).all()
+
+
+def test_m5_insights_show_observations_and_missing_inventory_inputs():
+    insights = build_insights(observed(), pd.DataFrame())
+    titles = {item["title"] for item in insights}
+    assert "28-day demand comparison" in titles
+    assert "Revenue has incomplete price coverage" in titles
+    assert "Inventory actions are unavailable" in titles
+    assert not any("Recommend" in item["detail"] for item in insights)
 
 
 def test_real_records_round_trip_without_inventing_missing_fields(tmp_path):

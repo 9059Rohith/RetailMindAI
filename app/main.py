@@ -671,8 +671,10 @@ def main() -> None:
         start_label = f"{all_data.date.min():%d %b %Y}" if all_data.date.notna().any() else "Dates unavailable"
         end_label = f"{all_data.date.max():%d %b %Y}" if all_data.date.notna().any() else "Dates unavailable"
         st.markdown(f'<div class="sidebar-source"><span>DATA SOURCE</span><strong>{html.escape(st.session_state.get("source", "M5 observed sample"))}</strong><small>{start_label} — {end_label}</small><small>{len(all_data):,} observed rows</small></div>', unsafe_allow_html=True)
-        if st.session_state.get("mode", "m5") == "m5":
+        if st.session_state.get("mode", "m5") == "m5" and all_data.date.notna().any():
             st.caption(f"Historical research data · latest observation {all_data.date.max():%Y}")
+        elif st.session_state.get("mode", "m5") == "m5":
+            st.caption("Historical research data · valid observation dates unavailable")
         else:
             st.caption("Uploaded observed retail data")
     titles = {"Overview": ("Retail intelligence", "An evidence-led view of observed sales and demand."),

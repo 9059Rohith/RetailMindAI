@@ -6,11 +6,49 @@
 
 An interactive Streamlit research platform for **AI-driven retail demand forecasting and sales analytics**.
 
-[Quick start](#run-it) · [Real data](#the-data) · [What the app does](#product-workflow) · [Forecast study](docs/m5_validation.md) · [Deployment](docs/deployment.md)
+[Watch the walkthrough](#watch-the-working-application) · [Screenshots](#application-gallery) · [Real data](#the-data) · [Run it](#run-it) · [Verification](#verification-evidence) · [Deployment](docs/deployment.md)
 
 </div>
 
+[![RetailMind AI walkthrough poster showing the working dashboard](docs/media/poster.png)](docs/media/walkthrough.mp4)
+
+<div align="center">
+
+**[▶ Watch the working application with narration and embedded subtitles](docs/media/walkthrough.mp4)** · [Caption file](docs/media/walkthrough.vtt) · [Full transcript](docs/media/transcript.md)
+
+</div>
+
+> **Research context:** Screens and forecasts use observed M5 sales ending **22 May 2016**. The forecast is an archival backtest demonstration. M5 has no recorded physical stock, unit cost, supplier or lead time, so the app does not invent inventory recommendations.
+
 ---
+
+## Watch the working application
+
+The linked MP4 is a recording of the running application, with voice narration and burned-in English subtitles. It walks through the observed dashboard, analytics, a trained and compared forecast, the inventory data boundary, insights, data quality and exports. The [separate WebVTT captions](docs/media/walkthrough.vtt) and [text transcript](docs/media/transcript.md) make the narration searchable and reusable. The [capture script](scripts/capture_walkthrough.py) records the actual browser sessions and checks the forecast and sales downloads.
+
+GitHub may open the MP4 on its own file page or download it, depending on the browser. The poster above is also a direct link to the video.
+
+## Application gallery
+
+These are screenshots of the running Docker application with the bundled observed M5 subset. They are not design mockups.
+
+| Demand overview | Measured forecast |
+| --- | --- |
+| [![Dashboard with observed demand KPIs, trends and evidence](docs/images/dashboard.png)](docs/images/dashboard.png) | [![Forecast result with model evidence and demand path](docs/images/forecast-result.png)](docs/images/forecast-result.png) |
+
+| Sales analytics | Data studio |
+| --- | --- |
+| [![Interactive sales analytics screen](docs/images/analytics.png)](docs/images/analytics.png) | [![Source quality and data availability checks](docs/images/data-studio.png)](docs/images/data-studio.png) |
+
+| Inventory boundary | Mobile layout |
+| --- | --- |
+| [![Inventory page explaining missing observed stock data](docs/images/inventory.png)](docs/images/inventory.png) | [![Responsive dashboard in a narrow browser viewport](docs/images/mobile.png)](docs/images/mobile.png) |
+
+| Evidence-labeled insights | Exportable reports |
+| --- | --- |
+| [![Insights derived from observed demand, category mix and field availability](docs/images/insights.png)](docs/images/insights.png) | [![Reports page with observed data and model exports](docs/images/reports.png)](docs/images/reports.png) |
+
+The screenshots are visual evidence of the interface; the [evaluation protocol](docs/m5_validation.md), [test suite](tests/) and [limitations](docs/limitations.md) provide the numerical and methodological evidence.
 
 ## At a glance
 
@@ -45,6 +83,8 @@ Selection is deterministic and independent of observed demand: within every **st
 
 **Revenue is a partial observed total.** The 863 unpriced rows contribute their real units to demand analysis and no amount to revenue. They are never treated as a zero-dollar sale. Sales may be censored by stock availability, which M5 does not reveal. The official dataset is historical US retail research data, not a current business feed. See the [data dictionary](docs/data_dictionary.md) and [limitations](docs/limitations.md).
 
+The committed subset is intentionally small enough for a GitHub-hosted Streamlit app, while retaining a complete 731-day window for each selected product/store series. The selection rule does not inspect sales outcomes. This makes the included app reproducible, but it is not a claim that 150 series represent all M5 products or a current retailer.
+
 To regenerate this exact subset after obtaining the three official files:
 
 ```bash
@@ -75,6 +115,16 @@ flowchart LR
 | **Insights and reports** | Evidence-labeled demand signals, exports of observed records, KPIs, alerts and model results |
 
 The interface has a dark, responsive design system, interactive Plotly charts, focused navigation, contextual empty states and reduced-motion support. Filters only expose dimensions present in the selected data.
+
+### A five-minute project demonstration
+
+1. Open **Overview** and select a category or store; observed units, revenue coverage, trend and charts recalculate from those rows.
+2. Open **Analytics** to compare time, category, product, store, weekday and holiday patterns. Read the notes beside descriptive relationships.
+3. Open **Forecast lab**, choose a product/store and horizon, then run model comparison. Inspect held-out WAPE, fold errors, empirical error band and the CSV export.
+4. Open **Data studio** to inspect source lineage, required-field quality, missing optional fields and database actions.
+5. Open **Inventory** to see the explicit unavailable state for this source, then **Insights** and **Reports** to export observations and evidence.
+
+No external account, API key or database is needed for this demonstration. Uploading a new observed dataset is supported in Data studio; stock-based features require that dataset to include actual stock and supply fields.
 
 ## Forecasting method
 
@@ -114,7 +164,7 @@ docker compose up --build
 
 If 8501 is occupied, set `APP_PORT=8502` before starting Compose. Optional MySQL data is local to the Docker volume. A Community Cloud deployment uses the bundled file directly and does not require MySQL.
 
-## Verify the project
+## Verification evidence
 
 ```bash
 python -m pip install -r requirements-dev.txt
@@ -124,7 +174,30 @@ python -m scripts.evaluate --horizon 7
 python -m compileall -q app retailmind scripts
 ```
 
-The tests cover data ingestion, quality and cleaning, analytics, forecasting, inventory formulas, persistence, and Streamlit page rendering. The included sample is checked for its observed dimensions and missing fields. Synthetic records inside isolated **test fixtures** exercise edge cases; no test fixture is loaded by the application.
+The tests cover data ingestion, quality and cleaning, analytics, forecasting, inventory formulas, persistence, and Streamlit page rendering. The included sample is checked by checksum, dimensions, dates, missing fields and database round trip. Synthetic records inside isolated **test fixtures** exercise edge cases; no test fixture is loaded by the application.
+
+| Gate | What is checked |
+| --- | --- |
+| Unit and integration tests | Real-data integrity, transformations, model outputs, inventory formulas, persistence and each Streamlit workspace |
+| Browser walkthrough | All seven M5 workspaces, rendered content and console, trained forecast, forecast CSV, full sales export, mobile layout and a category filter recalculation |
+| Docker run | App and MySQL health, local HTTP health endpoint, real-data UI |
+| Backtest | Held-out error metrics written by `scripts.evaluate` from observed demand |
+
+The [browser capture manifest](docs/media/capture-manifest.json) records the scenes and exercised browser checks. Passing these checks does not prove every possible uploaded dataset or operating environment; see [known limits](docs/limitations.md).
+
+**Verified 26 September 2026:** 32 automated tests passed; Ruff and Python compilation passed; the real-data, 7-day backtest completed; Docker health returned HTTP 200; the browser walkthrough exercised all seven available M5 workspaces, trained the default ML comparison, downloaded and checked forecast and full-sales CSV files, and confirmed the narrow viewport and category recalculation. The optional statistical-model test emitted one `statsmodels` convergence warning; it did not fail.
+
+### Reproduce the README media
+
+The images are captured from the running Docker app, not drawn by hand. On Windows, install optional local production tools with `pip install playwright pillow imageio-ffmpeg`, then run:
+
+```bash
+python -m scripts.capture_walkthrough --url http://localhost:8502
+python -m scripts.build_poster
+python -m scripts.build_walkthrough_media
+```
+
+The capture script accepts `--browser-path` for a local Chromium/Edge executable. The final command uses Windows SAPI for offline narration, then burns subtitles into an H.264/AAC MP4; its WebVTT and transcript are generated from the same cue text. These production tools are optional and are not loaded by the deployed app.
 
 ## Deploy on Streamlit Community Cloud
 
@@ -138,7 +211,23 @@ RetailMind demonstrates a complete, reproducible path from external source files
 
 The source is historical, price coverage is incomplete, and sales are an imperfect proxy for true demand when stock is unknown. Holiday comparisons and price correlations are descriptive. The system does not claim causal promotion uplift, measured ROI, current retail operations, or a novel forecasting algorithm. Those limits are part of the project’s research integrity.
 
-**Project layout:** `app/` Streamlit UI; `retailmind/` testable analytics, models and persistence; `data/` observed subset and provenance; `scripts/` reproducibility; `notebooks/` research walkthroughs; `sql/` normalized MySQL schema; `docs/` methodology and external validation; `tests/` verification.
+## Repository guide
+
+| Location | Purpose |
+| --- | --- |
+| [`app/`](app/) | Streamlit workspaces and visual system |
+| [`retailmind/`](retailmind/) | Data contracts, analytics, forecasting, inventory rules, insights and persistence |
+| [`data/`](data/) | Committed observed subset and machine-readable provenance |
+| [`scripts/`](scripts/) | M5 preparation, evaluation, browser capture and reproducible README media |
+| [`sql/`](sql/) | Normalized schema, indexes and analytical queries |
+| [`notebooks/`](notebooks/) | Research walkthroughs for data understanding, features, forecasting and inventory limits |
+| [`tests/`](tests/) | Data, model, persistence and Streamlit regression checks |
+| [`docs/architecture.md`](docs/architecture.md), [`docs/methodology.md`](docs/methodology.md) | System design and analytical assumptions |
+| [`docs/forecasting.md`](docs/forecasting.md), [`docs/m5_validation.md`](docs/m5_validation.md) | Forecast design, leakage controls and held-out results |
+| [`docs/data_dictionary.md`](docs/data_dictionary.md), [`docs/limitations.md`](docs/limitations.md) | Field meanings and evidence boundaries |
+| [`docs/deployment.md`](docs/deployment.md) | Community Cloud and Docker deployment procedure |
+
+The project is available under the repository [license](LICENSE). Dataset attribution and applicable source terms remain with the original M5 publisher.
 
 ---
 

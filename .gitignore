@@ -8,3 +8,4 @@ __pycache__/
 artifacts/
 .hf-space/
 *.pyc
+docs/media/*.webm
